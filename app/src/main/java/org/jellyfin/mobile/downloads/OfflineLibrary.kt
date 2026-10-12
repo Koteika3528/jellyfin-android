@@ -305,7 +305,7 @@ class OfflineLibrary(
         val file = root.findFile(MANIFEST_FILE) ?: return null
         return runCatching {
             context.contentResolver.openInputStream(file.uri)?.use { input ->
-                json.decodeFromString(Manifest.serializer(), input.readBytes().decodeToString())
+                json.decodeFromString(Manifest.serializer(), input.readBytes().decodeToString().removePrefix("\uFEFF"))
             }
         }.onFailure { err ->
             Timber.e(err, "Failed to read $MANIFEST_FILE")
