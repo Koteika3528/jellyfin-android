@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -13,35 +12,13 @@ import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.jellyfin.mobile.MainActivity
-import org.jellyfin.sdk.model.serializer.toUUIDOrNull
-import org.koin.android.ext.android.inject
 
 /**
  * Plays downloaded music from local files, without the server and without the web UI.
  * The queue is set by [DownloadedMusicPlayer]; the notification and lock screen controls come from media3.
  */
 class DownloadedMusicService : MediaSessionService() {
-    private val offlinePlayback: OfflinePlayback by inject()
     private var mediaSession: MediaSession? = null
-    private var currentItemId: String? = null
-
-    /** A track played to its end counts as played, the server learns it when it is reachable. */
-    private val playedListener = object : Player.Listener {
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) markPlayed(currentItemId)
-            currentItemId = mediaItem?.mediaId
-        }
-
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) markPlayed(currentItemId)
-        }
-    }
-
-    private fun markPlayed(mediaId: String?) {
-        val itemId = mediaId?.toUUIDOrNull() ?: return
-        offlinePlayback.save(itemId, positionTicks = 0, runTimeTicks = null, finished = true)
-        offlinePlayback.syncInBackground()
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +36,6 @@ class DownloadedMusicService : MediaSessionService() {
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
-        player.addListener(playedListener)
 
         val sessionActivity = PendingIntent.getActivity(
             this,

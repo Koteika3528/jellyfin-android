@@ -15,6 +15,7 @@ import org.jellyfin.mobile.data.dao.PlayStateDao
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.data.entity.PlayStateEntity
 import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
@@ -22,13 +23,15 @@ import timber.log.Timber
 import java.util.UUID
 
 /**
- * What was watched and listened to from the downloads without the server: the position to resume from
- * and whether the item was finished. The server learns it with [sync] once it is reachable again.
+ * What was watched from the downloads without the server: the position to resume from and whether a
+ * video was finished; and favorite marks (music is never marked as played, only as favorite). The server
+ * learns it with [sync] once it is reachable again.
  */
 class OfflinePlayback(
     private val playStateDao: PlayStateDao,
     private val downloadDao: DownloadDao,
     private val apiClientController: ApiClientController,
+    private val offlineStore: OfflineStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val syncMutex = Mutex()
@@ -78,6 +81,20 @@ class OfflinePlayback(
         }
     }
 
+    /** A favorite mark of a downloaded item, also without the server. */
+    fun isFavorite(download: DownloadEntity, pending: Map<String, Boolean>): Boolean =
+        pending[download.itemId.toString()] ?: (download.item.userData?.isFavorite == true)
+
+    fun setFavorite(itemId: UUID, favorite: Boolean) {
+        offlineStore.setPendingFavorite(itemId, favorite)
+        scope.launch {
+            val download = downloadDao.getDownloadByItemId(itemId) ?: return@launch
+            val userData = download.item.userData ?: return@launch
+            downloadDao.update(download.copy(item = download.item.copy(userData = userData.copy(isFavorite = favorite))))
+        }
+        syncInBackground()
+    }
+
     /** Sends what the server does not know yet. Quietly stops at the first connection failure. */
     fun syncInBackground() {
         scope.launch { sync() }
@@ -93,10 +110,15 @@ class OfflinePlayback(
                     playStateDao.markSynced(state.itemId, state.updatedAt)
                     continue
                 }
+                // Music is not marked as played (also states saved by earlier versions)
+                if (download.item.mediaType == MediaType.AUDIO) {
+                    playStateDao.markSynced(state.itemId, state.updatedAt)
+                    continue
+                }
                 try {
                     if (state.played) {
                         api.playStateApi.markPlayedItem(itemId = state.itemId)
-                    } else if (download.item.mediaType != MediaType.AUDIO) {
+                    } else {
                         api.playStateApi.reportPlaybackStopped(
                             PlaybackStopInfo(itemId = state.itemId, positionTicks = state.positionTicks, failed = false),
                         )
@@ -109,6 +131,26 @@ class OfflinePlayback(
                     playStateDao.markSynced(state.itemId, state.updatedAt)
                 } catch (e: Exception) {
                     Timber.i(e, "Server unreachable, play states stay pending")
+                    return@withLock
+                }
+            }
+
+            for ((id, favorite) in offlineStore.pendingFavorites.value) {
+                val itemId = runCatching { UUID.fromString(id) }.getOrNull() ?: continue
+                val download = downloadDao.getDownloadByItemId(itemId)
+                val api = download?.let { runCatching { apiClientController.getApiClient(it.serverId, it.userId) }.getOrNull() }
+                if (api == null) {
+                    offlineStore.clearPendingFavorite(itemId, favorite)
+                    continue
+                }
+                try {
+                    if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId) else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
+                    offlineStore.clearPendingFavorite(itemId, favorite)
+                } catch (e: InvalidStatusException) {
+                    Timber.w(e, "Server refused favorite of $itemId")
+                    offlineStore.clearPendingFavorite(itemId, favorite)
+                } catch (e: Exception) {
+                    Timber.i(e, "Server unreachable, favorites stay pending")
                     return@withLock
                 }
             }

@@ -34,6 +34,7 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     private val storageManager: StorageManager by inject()
     private val offlineLibrary: OfflineLibrary by inject()
     private val offlinePlayback: OfflinePlayback by inject()
+    private val offlineStore: OfflineStore by inject()
     private val musicPlayer = DownloadedMusicPlayer(get())
 
     val nowPlaying: StateFlow<DownloadedMusicPlayer.NowPlaying?> = musicPlayer.nowPlaying
@@ -42,6 +43,14 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     val playStates: StateFlow<Map<UUID, PlayStateEntity>> = offlinePlayback.observeStates()
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    /** Favorite marks not sent to the server yet, for [isFavorite]. */
+    val pendingFavorites: StateFlow<Map<String, Boolean>> = offlineStore.pendingFavorites
+
+    fun isFavorite(download: DownloadEntity, pending: Map<String, Boolean>) = offlinePlayback.isFavorite(download, pending)
+
+    fun toggleFavorite(download: DownloadEntity, pending: Map<String, Boolean>) =
+        offlinePlayback.setFavorite(download.itemId, !isFavorite(download, pending))
 
     fun progressOf(download: DownloadEntity, states: Map<UUID, PlayStateEntity>): OfflinePlayback.Progress? =
         offlinePlayback.progressOf(download, states[download.itemId])

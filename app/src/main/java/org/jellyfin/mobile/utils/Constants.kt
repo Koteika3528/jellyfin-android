@@ -47,6 +47,14 @@ object Constants {
     const val PREF_EXTERNAL_PLAYER_APP = "pref_external_player_app"
     const val PREF_SUBTITLE_STYLE = "pref_subtitle_style"
     const val PREF_STORAGE_LOCATION = "pref_storage_location"
+    const val PREF_NEW_EPISODES_MODE = "pref_downloads_new_episodes"
+    const val PREF_KEEP_EPISODES = "pref_downloads_keep_episodes"
+    const val PREF_DELETE_WATCHED_MODE = "pref_downloads_delete_watched"
+    const val PREF_STORAGE_LIMIT_GB = "pref_downloads_storage_limit"
+    const val PREF_LOW_SPACE_WARNING = "pref_downloads_low_space_warning"
+    const val PREF_MOBILE_DATA_POLICY = "pref_mobile_data_policy"
+    const val PREF_METERED_MAX_BITRATE = "pref_metered_max_bitrate"
+    const val PREF_STORAGE_ANALYZER = "pref_downloads_storage_analyzer"
     const val PREF_MEDIA_SEGMENT_ACTIONS = "pref_media_segment_actions"
 
     // InputManager commands

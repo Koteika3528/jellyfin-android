@@ -217,4 +217,5 @@
     <string name="downloads_continue">Continue %1$s</string>
     <string name="downloads_watch">Watch %1$s</string>
     <string name="downloads_played">Watched</string>
+    <string name="downloads_favorite">Favorite</string>
 </resources>

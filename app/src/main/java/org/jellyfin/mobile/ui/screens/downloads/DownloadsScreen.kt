@@ -76,6 +76,7 @@ fun DownloadsScreen(
     val storageLocationAccessible by viewModel.storageLocationAccessible.collectAsState()
     val nowPlaying by viewModel.nowPlaying.collectAsState()
     val playStates by viewModel.playStates.collectAsState()
+    val pendingFavorites by viewModel.pendingFavorites.collectAsState()
     val selection = remember { mutableStateSetOf<Long>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -296,8 +297,11 @@ fun DownloadsScreen(
                 exit = slideOutVertically { height -> height } + fadeOut(),
             ) {
                 nowPlaying?.let { state ->
+                    val track = downloads.firstOrNull { it.download.itemId.toString() == state.mediaId }?.download
                     MusicMiniPlayer(
                         state = state,
+                        favorite = track?.let { viewModel.isFavorite(it, pendingFavorites) },
+                        onToggleFavorite = { track?.let { viewModel.toggleFavorite(it, pendingFavorites) } },
                         onTogglePlayPause = { viewModel.togglePlayPause() },
                         onPrevious = { viewModel.playPrevious() },
                         onNext = { viewModel.playNext() },
@@ -346,6 +350,8 @@ fun DownloadsScreen(
                             removeAll = { pendingRemoval = it },
                             progress = { download -> viewModel.progressOf(download, playStates) },
                             openFromStart = { viewModel.openFromStart(it) },
+                            isFavorite = { viewModel.isFavorite(it, pendingFavorites) },
+                            toggleFavorite = { viewModel.toggleFavorite(it, pendingFavorites) },
                             toggleSelection = { download ->
                                 if (selection.contains(download.id)) selection.remove(download.id)
                                 else selection.add(download.id)

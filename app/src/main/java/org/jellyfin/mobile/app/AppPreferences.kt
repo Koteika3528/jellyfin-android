@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import androidx.core.content.edit
+import org.jellyfin.mobile.downloads.AutoMode
 import org.jellyfin.mobile.downloads.DownloadMethod
+import org.jellyfin.mobile.downloads.MobileDataPolicy
 import org.jellyfin.mobile.player.mediasegments.MediaSegmentAction
 import org.jellyfin.mobile.player.mediasegments.toMediaSegmentActionsString
 import org.jellyfin.mobile.settings.ExternalPlayerPackage
@@ -75,6 +77,33 @@ class AppPreferences(context: Context) {
                 }
             }
         }
+
+    /** Followed shows: new episodes are downloaded on their own, asked for first, or not at all (default). */
+    val newEpisodesMode: AutoMode
+        get() = AutoMode.fromInt(sharedPreferences.getInt(Constants.PREF_NEW_EPISODES_MODE, AutoMode.OFF.intValue))
+
+    /** How many unwatched episodes of a followed show to keep downloaded ahead; 0 - all new ones. */
+    val keepEpisodes: Int
+        get() = sharedPreferences.getInt(Constants.PREF_KEEP_EPISODES, 0)
+
+    /** Watched episodes and movies are deleted on their own, offered for deletion, or kept (default). */
+    val deleteWatchedMode: AutoMode
+        get() = AutoMode.fromInt(sharedPreferences.getInt(Constants.PREF_DELETE_WATCHED_MODE, AutoMode.OFF.intValue))
+
+    /** Space the downloads should stay within, in GB; 0 - no limit. */
+    val storageLimitGb: Int
+        get() = sharedPreferences.getInt(Constants.PREF_STORAGE_LIMIT_GB, 0)
+
+    val lowSpaceWarning: Boolean
+        get() = sharedPreferences.getBoolean(Constants.PREF_LOW_SPACE_WARNING, false)
+
+    var mobileDataPolicy: MobileDataPolicy
+        get() = MobileDataPolicy.fromInt(sharedPreferences.getInt(Constants.PREF_MOBILE_DATA_POLICY, MobileDataPolicy.ASK.intValue))
+        set(value) = sharedPreferences.edit { putInt(Constants.PREF_MOBILE_DATA_POLICY, value.intValue) }
+
+    /** Streaming bitrate cap on mobile data for the integrated player, in bit/s; 0 - no cap. */
+    val meteredMaxBitrate: Int
+        get() = sharedPreferences.getInt(Constants.PREF_METERED_MAX_BITRATE, 0)
 
     /**
      * The actions to take for each media segment type. Managed by the MediaSegmentRepository.

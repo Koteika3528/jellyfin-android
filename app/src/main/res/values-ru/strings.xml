@@ -205,4 +205,5 @@
     <string name="downloads_continue">Продолжить %1$s</string>
     <string name="downloads_watch">Смотреть %1$s</string>
     <string name="downloads_played">Просмотрено</string>
+    <string name="downloads_favorite">Избранное</string>
 </resources>

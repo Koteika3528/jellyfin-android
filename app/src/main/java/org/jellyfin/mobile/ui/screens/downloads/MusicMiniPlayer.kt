@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -38,6 +41,8 @@ fun MusicMiniPlayer(
     onNext: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
+    favorite: Boolean? = null,
+    onToggleFavorite: () -> Unit = {},
 ) = Surface(
     modifier = modifier.fillMaxWidth(),
     elevation = 8.dp,
@@ -80,6 +85,15 @@ fun MusicMiniPlayer(
             }
         }
 
+        if (favorite != null) {
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    imageVector = if (favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = stringResource(R.string.downloads_favorite),
+                    tint = if (favorite) MaterialTheme.colors.primary else LocalContentColor.current,
+                )
+            }
+        }
         IconButton(onClick = onPrevious, enabled = state.hasPrevious) {
             Icon(imageVector = Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.music_previous))
         }

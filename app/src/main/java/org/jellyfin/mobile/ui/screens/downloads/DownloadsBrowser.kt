@@ -33,6 +33,8 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import org.jellyfin.mobile.downloads.OfflinePlayback
 import androidx.compose.material.ScrollableTabRow
 import androidx.compose.material.Tab
@@ -86,6 +88,8 @@ class BrowseActions(
     val toggleSelection: (DownloadEntity) -> Unit,
     val progress: (DownloadEntity) -> OfflinePlayback.Progress? = { null },
     val openFromStart: (DownloadEntity) -> Unit = open,
+    val isFavorite: (DownloadEntity) -> Boolean = { false },
+    val toggleFavorite: (DownloadEntity) -> Unit = {},
 )
 
 @Composable
@@ -556,6 +560,17 @@ private fun EntryRow(
                 tint = MaterialTheme.colors.primary,
                 modifier = Modifier.padding(start = 8.dp).size(20.dp),
             )
+        }
+        if (entry.isAudio) {
+            val favorite = actions.isFavorite(entry.download)
+            IconButton(onClick = { actions.toggleFavorite(entry.download) }, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = stringResource(R.string.downloads_favorite),
+                    tint = if (favorite) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         item.runTimeTicks?.let { ticks ->
             Text(

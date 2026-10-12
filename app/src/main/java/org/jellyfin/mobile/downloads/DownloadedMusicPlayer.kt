@@ -22,6 +22,8 @@ import org.jellyfin.sdk.model.api.BaseItemDto
  */
 class DownloadedMusicPlayer(private val context: Context) {
     data class NowPlaying(
+        /** Item id of the track. */
+        val mediaId: String?,
         val title: String?,
         val subtitle: String?,
         val artworkUri: Uri?,
@@ -132,6 +134,7 @@ class DownloadedMusicPlayer(private val context: Context) {
         }
         val metadata = player.mediaMetadata
         _nowPlaying.value = NowPlaying(
+            mediaId = player.currentMediaItem?.mediaId,
             title = metadata.title?.toString(),
             subtitle = listOfNotNull(metadata.artist, metadata.albumTitle)
                 .map(CharSequence::toString)
