@@ -37,6 +37,12 @@ import org.jellyfin.mobile.utils.AndroidVersion
 import org.jellyfin.mobile.utils.BackPressInterceptor
 import org.jellyfin.mobile.utils.Constants
 import org.jellyfin.mobile.utils.Constants.FRAGMENT_WEB_VIEW_EXTRA_SERVER
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import org.jellyfin.mobile.data.dao.DownloadDao
+import org.jellyfin.mobile.downloads.DownloadStates
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.applyDefault
@@ -61,6 +67,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private lateinit var externalPlayer: ExternalPlayer
     private val mediaSegments: MediaSegments by inject()
     private val activityEventHandler: ActivityEventHandler by inject()
+    private val downloadDao: DownloadDao by inject()
 
     lateinit var server: ServerEntity
         private set
@@ -168,6 +175,17 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
             for (function in webappFunctionChannel) {
                 webView.evaluateJavascript(function, null)
             }
+        }
+
+        // Let the web client update its download badges
+        lifecycleScope.launch {
+            downloadDao.getAllDownloads()
+                .map(DownloadStates::toJson)
+                .distinctUntilChanged()
+                .flowOn(Dispatchers.IO)
+                .collect {
+                    if (connected) webView.evaluateJavascript("window.dispatchEvent(new Event('nativedownloadschanged'));", null)
+                }
         }
     }
 

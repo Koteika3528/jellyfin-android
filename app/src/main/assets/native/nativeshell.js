@@ -71,6 +71,10 @@ window.NativeShell = {
         window.NativeInterface.openDownloadManager();
     },
 
+    getDownloadStates() {
+        return JSON.parse(window.NativeInterface.getDownloadStates());
+    },
+
     openClientSettings() {
         window.NativeInterface.openClientSettings();
     },

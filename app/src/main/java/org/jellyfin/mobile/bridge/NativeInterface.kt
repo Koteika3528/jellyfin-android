@@ -16,6 +16,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.jellyfin.mobile.BuildConfig
+import org.jellyfin.mobile.data.dao.DownloadDao
+import org.jellyfin.mobile.downloads.DownloadStates
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.deviceprofile.DeviceProfileBuilder
@@ -48,6 +50,7 @@ class NativeInterface(private val context: Context) : KoinComponent {
     private val activityEventHandler: ActivityEventHandler = get()
     private val remoteVolumeProvider: RemoteVolumeProvider by inject()
     private val deviceProfileBuilder: DeviceProfileBuilder by inject()
+    private val downloadDao: DownloadDao by inject()
 
     @SuppressLint("HardwareIds")
     @JavascriptInterface
@@ -161,6 +164,15 @@ class NativeInterface(private val context: Context) : KoinComponent {
         }
 
         return true
+    }
+
+    /** Downloaded items for the badges of the web client, see [DownloadStates]. Called off the main thread. */
+    @JavascriptInterface
+    fun getDownloadStates(): String = try {
+        DownloadStates.toJson(downloadDao.getAllDownloadsNow())
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to read download states")
+        "{}"
     }
 
     @JavascriptInterface

@@ -53,6 +53,9 @@ interface DownloadDao {
     @Update(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateFile(entity: DownloadFileEntity): Int
 
+    @Query("SELECT * FROM download")
+    fun getAllDownloadsNow(): List<DownloadEntity>
+
     @Query("SELECT item_id FROM download")
     suspend fun getAllItemIds(): List<UUID>
 
