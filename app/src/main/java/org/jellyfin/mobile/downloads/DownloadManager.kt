@@ -1,6 +1,7 @@
 package org.jellyfin.mobile.downloads
 
 import android.content.Context
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jellyfin.mobile.app.AppPreferences
@@ -11,10 +12,7 @@ import org.jellyfin.mobile.data.entity.ServerEntity
 import org.jellyfin.mobile.data.entity.UserEntity
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
-import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ItemFields
-import org.jellyfin.sdk.model.api.MediaType
-import java.util.Locale
 import java.util.UUID
 
 class DownloadManager(
@@ -23,6 +21,7 @@ class DownloadManager(
     private val downloadDao: DownloadDao,
     private val appPreferences: AppPreferences,
     private val storageManager: StorageManager,
+    private val offlineLibrary: OfflineLibrary,
 ) {
     companion object {
         /**
@@ -72,7 +71,7 @@ class DownloadManager(
                         userId = user.id,
                         itemId = item.id,
                         item = item,
-                        path = downloadFolderName(item),
+                        path = OfflineLayout.fromMetadata(item).directory,
                     )
                     downloadDao.insert(downloadEntity)
                 }
@@ -82,23 +81,6 @@ class DownloadManager(
         if (!DownloadWorker.isActive(context)) {
             DownloadWorker.start(context, appPreferences)
         }
-    }
-
-    /**
-     * Tracks of different albums often share a name ("Intro") and a file name, so music
-     * gets its own folder per album and track.
-     */
-    private fun downloadFolderName(item: BaseItemDto): String {
-        val name = item.name ?: item.id.toString()
-        if (item.mediaType != MediaType.AUDIO) return name
-        val prefix = listOfNotNull(item.albumArtist, item.album)
-            .filter(String::isNotBlank)
-            .joinToString(" - ")
-        val track = item.indexNumber?.let { "%02d. ".format(Locale.ROOT, it) }.orEmpty()
-        return listOf(prefix, track + name)
-            .filter(String::isNotBlank)
-            .joinToString(" - ")
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
     }
 
     suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {
@@ -125,6 +107,10 @@ class DownloadManager(
 
     suspend fun delete(id: Long, deleteFiles: Boolean) = withContext(Dispatchers.IO) {
         val download = downloadDao.getDownload(id) ?: return@withContext
+        val files = downloadDao.getFiles(id)
+
+        // Covers and posters shared with other downloads stay (counted before this download's rows go away)
+        val removable = if (deleteFiles) files.filter { file -> downloadDao.countOtherFilesWithUri(file.uri, id) == 0 } else emptyList()
 
         downloadDao.delete(id)
 
@@ -133,8 +119,17 @@ class DownloadManager(
         }
 
         if (deleteFiles) {
-            val storageLocation = storageManager.getStorageLocation()
-            storageLocation?.findFile(download.path)?.delete()
+            for (file in removable) {
+                runCatching { DocumentFile.fromSingleUri(context, file.uri)?.delete() }
+            }
+            // Remove folders left empty: the item's folder and, for episodes, the season and series folders
+            val folders = buildSet {
+                add(download.path)
+                files.forEach { file -> add(offlineLibrary.relativePath(download, file).substringBeforeLast('/', "")) }
+            }
+            folders.sortedByDescending { it.length }.forEach(storageManager::deleteEmptyDirectories)
         }
+
+        if (deleteFiles) offlineLibrary.scheduleWrite() else offlineLibrary.dismiss(download.itemId)
     }
 }

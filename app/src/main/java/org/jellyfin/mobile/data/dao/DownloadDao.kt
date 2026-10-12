@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.data.dao
 
+import android.net.Uri
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -51,4 +52,18 @@ interface DownloadDao {
 
     @Update(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateFile(entity: DownloadFileEntity): Int
+
+    @Query("SELECT item_id FROM download")
+    suspend fun getAllItemIds(): List<UUID>
+
+    @Query("DELETE FROM download_file WHERE id = :id")
+    suspend fun deleteFile(id: Long)
+
+    @Transaction
+    @Query("SELECT * FROM download WHERE status = 'DOWNLOADED' ORDER BY created_at ASC")
+    suspend fun getCompletedDownloads(): List<DownloadFiles>
+
+    /** Files shared by several downloads (album cover, series and season posters) are deleted with the last one. */
+    @Query("SELECT COUNT(*) FROM download_file WHERE uri = :uri AND download_id != :downloadId")
+    suspend fun countOtherFilesWithUri(uri: Uri, downloadId: Long): Int
 }

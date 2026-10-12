@@ -57,6 +57,45 @@ class StorageManager(
         return true
     }
 
+    /**
+     * Finds (or with [create] makes) the folder at the "/"-separated [path] inside the storage location.
+     */
+    fun resolveDirectory(path: String, create: Boolean): DocumentFile? {
+        var directory = getStorageLocation() ?: return null
+        for (segment in path.split('/').filter(String::isNotEmpty)) {
+            val existing = directory.findFile(segment)
+            directory = when {
+                existing != null && existing.isDirectory -> existing
+                create && existing == null -> directory.createDirectory(segment) ?: return null
+                else -> return null
+            }
+        }
+        return directory
+    }
+
+    /** Finds the file at the "/"-separated [path] inside the storage location. */
+    fun resolveFile(path: String): DocumentFile? {
+        val directory = resolveDirectory(path.substringBeforeLast('/', ""), create = false) ?: return null
+        return directory.findFile(path.substringAfterLast('/'))?.takeIf { it.isFile }
+    }
+
+    /** Finds or creates the file at the "/"-separated [path], making its folders as needed. */
+    fun createFile(path: String): DocumentFile? {
+        val directory = resolveDirectory(path.substringBeforeLast('/', ""), create = true) ?: return null
+        val name = path.substringAfterLast('/')
+        return directory.findFile(name)?.takeIf { it.isFile } ?: directory.createFile("", name)
+    }
+
+    /** Removes the folder at [path] and its parents while they are empty (never the storage location itself). */
+    fun deleteEmptyDirectories(path: String) {
+        var current = path.split('/').filter(String::isNotEmpty)
+        while (current.isNotEmpty()) {
+            val directory = resolveDirectory(current.joinToString("/"), create = false) ?: return
+            if (directory.listFiles().isNotEmpty() || !directory.delete()) return
+            current = current.dropLast(1)
+        }
+    }
+
     private fun ensureNoMedia(documentFile: DocumentFile) {
         if (documentFile.findFile(NOMEDIA_FILE) == null) {
             documentFile.createFile("", NOMEDIA_FILE)

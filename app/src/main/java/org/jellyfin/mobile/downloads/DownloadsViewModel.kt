@@ -30,12 +30,27 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     private val downloadManager: DownloadManager by inject()
     private val activityEventHandler: ActivityEventHandler by inject()
     private val storageManager: StorageManager by inject()
+    private val offlineLibrary: OfflineLibrary by inject()
     private val musicPlayer = DownloadedMusicPlayer(get())
 
     val nowPlaying: StateFlow<DownloadedMusicPlayer.NowPlaying?> = musicPlayer.nowPlaying
 
     init {
         musicPlayer.connect()
+        syncLibrary()
+    }
+
+    /**
+     * Brings back downloads listed in the library file of the storage folder (after a clean install
+     * or when another folder was chosen), then rewrites the file from the app's database.
+     */
+    private fun syncLibrary() {
+        viewModelScope.launch {
+            runCatching {
+                offlineLibrary.restore()
+                offlineLibrary.write()
+            }
+        }
     }
 
     val downloads: StateFlow<List<DownloadFiles>> = downloadDao
@@ -71,14 +86,7 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
             MediaType.UNKNOWN -> {
                 viewModelScope.launch {
                     withContext(Dispatchers.IO) {
-                        val storageLocation = storageManager.getStorageLocation()
-                        val itemLocation = storageLocation?.findFile(download.path)
-                        if (itemLocation != null && itemLocation.isDirectory) {
-                            val filename = download.item.path?.replace(Regex("^.*[\\\\/]"), "")
-                            if (filename != null) itemLocation.findFile(filename)?.uri else null
-                        } else {
-                            null
-                        }
+                        downloadDao.getFiles(download.id).firstOrNull { it.type == DownloadFileType.ITEM }?.uri
                     }?.let {
                         activityEventHandler.emit(ActivityEvent.OpenUrl(it.toString(), true))
                     }
@@ -145,5 +153,6 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         storageManager.changeStorageLocation(uri)
         _storageLocation.value = storageManager.getStorageLocation()
         _storageLocationAccessible.value = storageManager.isStorageLocationAccessible()
+        syncLibrary()
     }
 }

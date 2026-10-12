@@ -10,4 +10,14 @@ enum class DownloadFileType {
      * The primary image for the item.
      */
     IMAGE_PRIMARY,
+
+    /**
+     * The series poster of an episode, shared by all episodes of the series.
+     */
+    IMAGE_SERIES,
+
+    /**
+     * The season poster of an episode, shared by all episodes of the season.
+     */
+    IMAGE_SEASON,
 }
