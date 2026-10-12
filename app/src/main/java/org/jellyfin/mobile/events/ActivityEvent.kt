@@ -19,4 +19,17 @@ sealed class ActivityEvent {
 
     /** The server did not answer: show the downloads, if there are any, instead of only the server selection. */
     data object ServerUnreachable : ActivityEvent()
+
+    /** "Ask first": new episodes of followed shows to download, watched downloads to delete. */
+    class OfferDownloadsMaintenance(
+        val newEpisodes: List<Pair<UUID, String>>,
+        val watchedIds: List<Long>,
+        val watchedBytes: Long,
+    ) : ActivityEvent()
+
+    /** Mobile data is not to be used: only the downloads open. */
+    data object OpenDownloadsWifiOnly : ActivityEvent()
+
+    /** Opens the downloads on the storage page. */
+    data object OpenDownloadsStorage : ActivityEvent()
 }

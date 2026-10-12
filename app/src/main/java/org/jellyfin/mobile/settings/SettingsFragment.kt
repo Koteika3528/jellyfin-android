@@ -3,6 +3,7 @@ package org.jellyfin.mobile.settings
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.text.format.Formatter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,7 +27,12 @@ import org.jellyfin.mobile.R
 import org.jellyfin.mobile.app.AppPreferences
 import org.jellyfin.mobile.app.StorageManager
 import org.jellyfin.mobile.databinding.FragmentSettingsBinding
+import org.jellyfin.mobile.downloads.AutoMode
+import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadMethod
+import org.jellyfin.mobile.downloads.MobileDataPolicy
+import org.jellyfin.mobile.events.ActivityEvent
+import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.BackPressInterceptor
 import org.jellyfin.mobile.utils.Constants
 import org.jellyfin.mobile.utils.applyWindowInsetsAsMargins
@@ -39,6 +45,7 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
 
     private val appPreferences: AppPreferences by inject()
     private val storageManager: StorageManager by inject()
+    private val activityEventHandler: ActivityEventHandler by inject()
 
     private val storageLocationPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -289,11 +296,100 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
                 false
             }
         }
+
+        pref(Constants.PREF_STORAGE_ANALYZER) {
+            titleRes = R.string.pref_downloads_storage_analyzer
+            summaryRes = R.string.pref_downloads_storage_analyzer_summary
+            onClick {
+                activityEventHandler.emit(ActivityEvent.OpenDownloadsStorage)
+                false
+            }
+        }
+
+        // Everything automatic is off until chosen here
+        singleChoice(
+            Constants.PREF_NEW_EPISODES_MODE,
+            listOf(
+                SelectionItem(AutoMode.OFF.intValue, R.string.pref_auto_off, R.string.pref_downloads_new_episodes_off),
+                SelectionItem(AutoMode.ASK.intValue, R.string.pref_auto_ask, R.string.pref_downloads_new_episodes_ask),
+                SelectionItem(AutoMode.AUTO.intValue, R.string.pref_auto_auto, R.string.pref_downloads_new_episodes_auto),
+            ),
+        ) {
+            titleRes = R.string.pref_downloads_new_episodes
+            initialSelection = AutoMode.OFF.intValue
+        }
+
+        singleChoice(
+            Constants.PREF_KEEP_EPISODES,
+            listOf(SelectionItem(0, getString(R.string.pref_downloads_keep_all))) +
+                listOf(1, 2, 3, 5, 10).map { count -> SelectionItem(count, count.toString()) },
+        ) {
+            titleRes = R.string.pref_downloads_keep_episodes
+            initialSelection = 0
+        }
+
+        singleChoice(
+            Constants.PREF_DELETE_WATCHED_MODE,
+            listOf(
+                SelectionItem(AutoMode.OFF.intValue, R.string.pref_auto_off, R.string.pref_downloads_delete_off),
+                SelectionItem(AutoMode.ASK.intValue, R.string.pref_auto_ask, R.string.pref_downloads_delete_ask),
+                SelectionItem(AutoMode.AUTO.intValue, R.string.pref_auto_auto, R.string.pref_downloads_delete_auto),
+            ),
+        ) {
+            titleRes = R.string.pref_downloads_delete_watched
+            initialSelection = AutoMode.OFF.intValue
+        }
+
+        singleChoice(
+            Constants.PREF_STORAGE_LIMIT_GB,
+            listOf(SelectionItem(0, getString(R.string.pref_downloads_no_limit))) +
+                listOf(2, 5, 10, 20, 50, 100, 200).map { gb ->
+                    SelectionItem(gb, Formatter.formatShortFileSize(requireContext(), gb * DownloadManager.BYTES_PER_GB))
+                },
+        ) {
+            titleRes = R.string.pref_downloads_storage_limit
+            initialSelection = 0
+        }
+
+        checkBox(Constants.PREF_LOW_SPACE_WARNING) {
+            titleRes = R.string.pref_downloads_low_space
+            summaryRes = R.string.pref_downloads_low_space_summary
+            defaultValue = false
+        }
+
+        categoryHeader(PREF_CATEGORY_MOBILE_DATA) {
+            titleRes = R.string.pref_category_mobile_data
+        }
+
+        singleChoice(
+            Constants.PREF_MOBILE_DATA_POLICY,
+            listOf(
+                SelectionItem(MobileDataPolicy.ASK.intValue, R.string.pref_mobile_data_ask, R.string.pref_mobile_data_ask_summary),
+                SelectionItem(MobileDataPolicy.ALWAYS.intValue, R.string.pref_mobile_data_always, R.string.pref_mobile_data_always_summary),
+                SelectionItem(MobileDataPolicy.NEVER.intValue, R.string.pref_mobile_data_never, R.string.pref_mobile_data_never_summary),
+            ),
+        ) {
+            titleRes = R.string.pref_mobile_data_policy
+            initialSelection = MobileDataPolicy.ASK.intValue
+        }
+
+        singleChoice(
+            Constants.PREF_METERED_MAX_BITRATE,
+            listOf(SelectionItem(0, getString(R.string.pref_metered_bitrate_none))) +
+                listOf(8_000_000, 4_000_000, 2_000_000, 1_000_000, 500_000).map { bitrate ->
+                    SelectionItem(bitrate, "%s Mbit/s".format(java.util.Locale.ROOT, (bitrate / 1_000_000.0).toString().removeSuffix(".0")))
+                },
+        ) {
+            titleRes = R.string.pref_metered_bitrate
+            summaryRes = R.string.pref_metered_bitrate_summary
+            initialSelection = 0
+        }
     }
 
     companion object {
         const val PREF_CATEGORY_MUSIC_PLAYER = "pref_category_music"
         const val PREF_CATEGORY_VIDEO_PLAYER = "pref_category_video"
         const val PREF_CATEGORY_DOWNLOADS = "pref_category_downloads"
+        const val PREF_CATEGORY_MOBILE_DATA = "pref_category_mobile_data"
     }
 }

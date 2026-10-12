@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.text.format.Formatter
+import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -18,6 +20,7 @@ import org.jellyfin.mobile.R
 import org.jellyfin.mobile.bridge.JavascriptCallback
 import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.downloads.DownloadsFragment
+import org.jellyfin.mobile.downloads.OfflineMaintenance
 import org.jellyfin.mobile.player.ui.PlayerFragment
 import org.jellyfin.mobile.player.ui.PlayerFullscreenHelper
 import org.jellyfin.mobile.settings.SettingsFragment
@@ -44,6 +47,44 @@ class ActivityEventHandler(
                 }
             }
         }
+    }
+
+    /** "Ask first" of the downloads settings: new episodes to download, then watched ones to delete. */
+    private fun MainActivity.offerMaintenance(event: ActivityEvent.OfferDownloadsMaintenance) {
+        val maintenance: OfflineMaintenance = get()
+        fun offerWatched() {
+            if (event.watchedIds.isEmpty()) return
+            AlertDialog.Builder(this)
+                .setTitle(R.string.downloads_offer_watched_title)
+                .setMessage(
+                    resources.getQuantityString(
+                        R.plurals.downloads_offer_watched_message,
+                        event.watchedIds.size,
+                        event.watchedIds.size,
+                        Formatter.formatShortFileSize(this, event.watchedBytes),
+                    ),
+                )
+                .setPositiveButton(R.string.downloads_offer_delete) { _, _ -> maintenance.deleteInBackground(event.watchedIds) }
+                .setNeutralButton(R.string.downloads_offer_choose) { _, _ ->
+                    if (!supportFragmentManager.isStateSaved) {
+                        supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.storageArguments(cleanup = true))
+                    }
+                }
+                .setNegativeButton(R.string.downloads_offer_later, null)
+                .show()
+        }
+
+        if (event.newEpisodes.isEmpty()) {
+            offerWatched()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.downloads_offer_new_title)
+            .setMessage(event.newEpisodes.joinToString("\n") { it.second })
+            .setPositiveButton(R.string.downloads_offer_download) { _, _ -> maintenance.downloadInBackground(event.newEpisodes.map { it.first }) }
+            .setNegativeButton(R.string.downloads_offer_later, null)
+            .setOnDismissListener { offerWatched() }
+            .show()
     }
 
     @Suppress("CyclomaticComplexMethod", "LongMethod")
@@ -87,13 +128,24 @@ class ActivityEventHandler(
             ActivityEvent.OpenDownloads -> {
                 supportFragmentManager.addFragment<DownloadsFragment>()
             }
+            is ActivityEvent.OfferDownloadsMaintenance -> offerMaintenance(event)
+            ActivityEvent.OpenDownloadsWifiOnly -> {
+                if (!supportFragmentManager.isStateSaved && supportFragmentManager.findFragmentById(R.id.fragment_container) !is DownloadsFragment) {
+                    supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.wifiOnlyArguments())
+                }
+            }
+            ActivityEvent.OpenDownloadsStorage -> {
+                if (!supportFragmentManager.isStateSaved) {
+                    supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.storageArguments())
+                }
+            }
             ActivityEvent.ServerUnreachable -> {
                 lifecycleScope.launch {
                     val downloadDao: DownloadDao = get()
                     val hasDownloads = withContext(Dispatchers.IO) { downloadDao.getCompletedDownloads().isNotEmpty() }
                     val alreadyOpen = supportFragmentManager.findFragmentById(R.id.fragment_container) is DownloadsFragment
                     if (hasDownloads && !alreadyOpen && !supportFragmentManager.isStateSaved) {
-                        supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.offlineArguments())
+                        supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.unreachableArguments())
                     }
                 }
             }

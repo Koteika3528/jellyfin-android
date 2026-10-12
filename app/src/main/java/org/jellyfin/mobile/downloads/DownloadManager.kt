@@ -1,6 +1,9 @@
 package org.jellyfin.mobile.downloads
 
 import android.content.Context
+import android.text.format.Formatter
+import android.widget.Toast
+import org.jellyfin.mobile.R
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,6 +32,9 @@ class DownloadManager(
          * split into separate download chunks.
          */
         private const val ITEMS_BATCH = 25
+
+        const val BYTES_PER_GB = 1_000_000_000L
+        private const val LOW_SPACE_BYTES = 2 * BYTES_PER_GB
 
         /** What a download keeps of its item: files and streams to play it, genres and overview to browse it offline. */
         private val ITEM_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.PATH, ItemFields.GENRES, ItemFields.OVERVIEW)
@@ -84,6 +90,27 @@ class DownloadManager(
         if (!DownloadWorker.isActive(context)) {
             DownloadWorker.start(context, appPreferences)
         }
+
+        warnAboutSpace()
+    }
+
+    /** "Warn when the device runs out of space": little free space, or the space set aside is used up. */
+    private suspend fun warnAboutSpace() {
+        if (!appPreferences.lowSpaceWarning) return
+        val free = storageManager.availableBytes()
+        val used = downloadDao.getCompletedDownloads().sumOf { download -> download.files.sumOf { it.size } }
+        val limit = appPreferences.storageLimitGb * BYTES_PER_GB
+        val message = when {
+            free != null && free < LOW_SPACE_BYTES ->
+                context.getString(R.string.downloads_warning_low_space, Formatter.formatShortFileSize(context, LOW_SPACE_BYTES))
+            limit > 0 && used >= limit -> context.getString(
+                R.string.downloads_warning_limit,
+                Formatter.formatShortFileSize(context, used),
+                Formatter.formatShortFileSize(context, limit),
+            )
+            else -> return
+        }
+        withContext(Dispatchers.Main) { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
     }
 
     /**

@@ -33,6 +33,7 @@ import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadNotificationManager
 import org.jellyfin.mobile.downloads.DownloadQueue
 import org.jellyfin.mobile.downloads.OfflineLibrary
+import org.jellyfin.mobile.downloads.OfflineMaintenance
 import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.downloads.OfflineStore
 import org.jellyfin.mobile.downloads.DownloadsViewModel
@@ -191,5 +192,6 @@ val applicationModule = module {
     single { OfflineLibrary(get(), get(), get(), get(), get(), get(), get()) }
     single { OfflineStore(androidApplication()) }
     single { OfflinePlayback(get(), get(), get(), get()) }
+    single { OfflineMaintenance(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { FileDownloader(get()) }
 }

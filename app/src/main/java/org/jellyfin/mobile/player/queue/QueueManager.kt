@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.player.queue
 
+import android.app.Application
 import android.net.Uri
 import androidx.annotation.CheckResult
 import androidx.core.net.toUri
@@ -34,6 +35,8 @@ import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import org.jellyfin.mobile.app.AppPreferences
+import org.jellyfin.mobile.downloads.NetworkState
 import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.core.component.KoinComponent
@@ -52,6 +55,7 @@ class QueueManager(
     private val deviceProfileBuilder: DeviceProfileBuilder by inject()
     private val downloadDao: DownloadDao by inject()
     private val offlinePlayback: OfflinePlayback by inject()
+    private val appPreferences: AppPreferences by inject()
     private val deviceProfile = deviceProfileBuilder.getDeviceProfile()
 
     private var currentQueue: List<UUID> = emptyList()
@@ -82,7 +86,7 @@ class QueueManager(
             else -> playOptions.mediaSourceId?.toUUIDOrNull()
         } ?: return PlayerException.InvalidPlayOptions()
 
-        val maxStreamingBitrate = preferences?.let {
+        val webMaxStreamingBitrate = preferences?.let {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val endpoint by apiClient.systemApi.getEndpointInfo()
@@ -91,6 +95,9 @@ class QueueManager(
                 }
             }.getOrNull()
         }
+        // "Streaming quality on mobile data" of the app settings caps it further
+        val meteredCap = appPreferences.meteredMaxBitrate.takeIf { it > 0 && NetworkState.isMetered(viewModel.getApplication<Application>()) }
+        val maxStreamingBitrate = listOfNotNull(webMaxStreamingBitrate, meteredCap).minOrNull()
 
         when (playOptions.playFromDownloads) {
             true -> playOptions.mediaSourceId?.let {

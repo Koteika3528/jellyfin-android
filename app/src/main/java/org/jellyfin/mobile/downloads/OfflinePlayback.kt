@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -39,6 +40,8 @@ class OfflinePlayback(
     data class Progress(val positionTicks: Long, val played: Boolean, val runTimeTicks: Long?) {
         val percent: Float? get() = runTimeTicks?.takeIf { it > 0 && positionTicks > 0 }?.let { (positionTicks.toFloat() / it).coerceIn(0f, 1f) }
     }
+
+    suspend fun currentStates(): Map<UUID, PlayStateEntity> = observeStates().first()
 
     /** Local play states by item, for [progressOf]. */
     fun observeStates(): Flow<Map<UUID, PlayStateEntity>> = playStateDao.observeAll().map { list -> list.associateBy { it.itemId } }

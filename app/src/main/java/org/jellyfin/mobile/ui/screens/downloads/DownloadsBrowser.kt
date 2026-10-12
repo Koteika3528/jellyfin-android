@@ -76,6 +76,7 @@ sealed interface BrowseLocation {
     data object Root : BrowseLocation
     data class Library(val name: String) : BrowseLocation
     data class Group(val library: String, val kind: GroupKind, val key: String, val title: String) : BrowseLocation
+    data object Storage : BrowseLocation
 }
 
 /** What the browser can ask the screen to do. */
@@ -90,6 +91,10 @@ class BrowseActions(
     val openFromStart: (DownloadEntity) -> Unit = open,
     val isFavorite: (DownloadEntity) -> Boolean = { false },
     val toggleFavorite: (DownloadEntity) -> Unit = {},
+    val isFollowed: (OfflineEntry) -> Boolean = { false },
+    val setFollowed: (OfflineEntry, Boolean) -> Unit = { _, _ -> },
+    /** Whether followed shows get new episodes at all (the setting is not off). */
+    val newEpisodesEnabled: Boolean = false,
 )
 
 @Composable
@@ -106,6 +111,8 @@ fun DownloadsBrowser(
         location is BrowseLocation.Root -> RootView(index, actions, selection, modifier)
         location is BrowseLocation.Library -> LibraryView(index, location.name, actions, selection, modifier)
         location is BrowseLocation.Group -> GroupView(index, location, actions, selection, modifier)
+        // The storage page is drawn by the screen, which owns its dialog
+        location is BrowseLocation.Storage -> Unit
     }
 }
 
@@ -354,6 +361,12 @@ private fun GroupView(index: OfflineIndex, location: BrowseLocation.Group, actio
                 showPlay = music,
                 onPlay = { shuffle -> actions.playTracks(entries, 0, shuffle) },
                 onRemove = { actions.removeAll(entries.map { it.download }) },
+                follow = if (location.kind == GroupKind.SERIES) {
+                    val first = entries.first()
+                    Triple(actions.isFollowed(first), actions.newEpisodesEnabled) { followed: Boolean -> actions.setFollowed(first, followed) }
+                } else {
+                    null
+                },
                 watch = next?.let { (entry, resume) ->
                     val label = episodeLabel(entry)
                     (if (resume) stringResource(R.string.downloads_continue, label) else stringResource(R.string.downloads_watch, label)) to {
@@ -405,6 +418,7 @@ private fun GroupHeader(
     onPlay: (Boolean) -> Unit,
     onRemove: () -> Unit,
     watch: Pair<String, () -> Unit>? = null,
+    follow: Triple<Boolean, Boolean, (Boolean) -> Unit>? = null,
 ) {
     val context = LocalContext.current
     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -442,6 +456,24 @@ private fun GroupHeader(
                 }
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.downloads_remove_group))
+                }
+            }
+            follow?.let { (followed, enabled, onChange) ->
+                Row(
+                    modifier = Modifier.clickable { onChange(!followed) }.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = followed, onCheckedChange = onChange)
+                    Column {
+                        Text(stringResource(if (followed) R.string.downloads_follow_on else R.string.downloads_follow), style = MaterialTheme.typography.body2)
+                        if (followed && !enabled) {
+                            Text(
+                                stringResource(R.string.downloads_follow_off_hint),
+                                style = MaterialTheme.typography.caption,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
                 }
             }
         }

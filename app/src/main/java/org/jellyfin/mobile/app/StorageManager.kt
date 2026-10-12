@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import org.jellyfin.mobile.R
@@ -94,6 +95,22 @@ class StorageManager(
             if (directory.listFiles().isNotEmpty() || !directory.delete()) return
             current = current.dropLast(1)
         }
+    }
+
+    /** Free space on the volume of the storage location, when its provider reports it. */
+    fun availableBytes(): Long? {
+        val tree = appPreferences.storageLocation?.toUri() ?: return null
+        return runCatching {
+            val rootId = DocumentsContract.getTreeDocumentId(tree).substringBefore(':')
+            val columns = arrayOf(DocumentsContract.Root.COLUMN_ROOT_ID, DocumentsContract.Root.COLUMN_AVAILABLE_BYTES)
+            context.contentResolver.query(DocumentsContract.buildRootsUri(tree.authority), columns, null, null, null)?.use { cursor ->
+                var available: Long? = null
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(0) == rootId && !cursor.isNull(1)) available = cursor.getLong(1)
+                }
+                available
+            }
+        }.getOrNull()
     }
 
     private fun ensureNoMedia(documentFile: DocumentFile) {

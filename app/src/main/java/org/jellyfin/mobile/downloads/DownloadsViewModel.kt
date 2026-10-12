@@ -17,6 +17,7 @@ import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.data.entity.DownloadFiles
 import org.jellyfin.mobile.data.entity.PlayStateEntity
+import org.jellyfin.mobile.app.AppPreferences
 import java.util.UUID
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
@@ -43,6 +44,35 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     val playStates: StateFlow<Map<UUID, PlayStateEntity>> = offlinePlayback.observeStates()
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    private val offlineMaintenance: OfflineMaintenance by inject()
+    private val appPreferences: AppPreferences by inject()
+
+    /** Free space where the downloads are, when known. */
+    private val _availableBytes = MutableStateFlow<Long?>(null)
+    val availableBytes: StateFlow<Long?> = _availableBytes.asStateFlow()
+
+    val storageLimitBytes: Long get() = appPreferences.storageLimitGb * DownloadManager.BYTES_PER_GB
+
+    val newEpisodesEnabled: Boolean get() = appPreferences.newEpisodesMode != AutoMode.OFF
+
+    /** Followed shows: new episodes are downloaded for them (see the settings). */
+    val follows: StateFlow<List<OfflineStore.Follow>> = offlineStore.follows
+
+    fun refreshAvailableBytes() {
+        viewModelScope.launch { _availableBytes.value = withContext(Dispatchers.IO) { storageManager.availableBytes() } }
+    }
+
+    fun setFollowed(download: DownloadEntity, followed: Boolean) {
+        val seriesId = download.item.seriesId ?: return
+        offlineStore.setFollowed(seriesId, download.serverId, download.userId, download.item.seriesName, followed)
+        if (followed) offlineMaintenance.runInBackground()
+    }
+
+    /** Deletes the downloads chosen on the storage page, with their files. */
+    fun deleteDownloads(downloads: List<DownloadEntity>) {
+        viewModelScope.launch { downloads.forEach { downloadManager.delete(it.id, deleteFiles = true) } }
+    }
 
     /** Favorite marks not sent to the server yet, for [isFavorite]. */
     val pendingFavorites: StateFlow<Map<String, Boolean>> = offlineStore.pendingFavorites

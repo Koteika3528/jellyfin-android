@@ -43,6 +43,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.downloads.DownloadStates
+import org.jellyfin.mobile.downloads.MobileDataPolicy
+import org.jellyfin.mobile.downloads.NetworkState
+import org.jellyfin.mobile.downloads.OfflineMaintenance
 import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
@@ -70,6 +73,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private val activityEventHandler: ActivityEventHandler by inject()
     private val downloadDao: DownloadDao by inject()
     private val offlinePlayback: OfflinePlayback by inject()
+    private val offlineMaintenance: OfflineMaintenance by inject()
 
     lateinit var server: ServerEntity
         private set
@@ -113,6 +117,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
                 connected = true
                 // The server is reachable: send what was watched from the downloads meanwhile
                 offlinePlayback.syncInBackground()
+                offlineMaintenance.runInBackground()
                 runOnUiThread {
                     webViewBinding.loadingContainer.isVisible = false
                     webView.fadeIn()
@@ -215,9 +220,38 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         addJavascriptInterface(externalPlayer, "ExternalPlayer")
         addJavascriptInterface(mediaSegments, "MediaSegments")
 
+        // "Mobile data" of the app settings: ask (default), always, or Wi-Fi only
+        val policy = appPreferences.mobileDataPolicy
+        when {
+            NetworkState.mayUseNetwork(requireContext(), policy) -> loadServer()
+            policy == MobileDataPolicy.NEVER -> activityEventHandler.emit(ActivityEvent.OpenDownloadsWifiOnly)
+            else -> askForMobileData(this)
+        }
+    }
+
+    private fun WebView.loadServer() {
         loadUrl("${server.hostname.trimEnd('/')}/")
         postDelayed(timeoutRunnable, Constants.INITIAL_CONNECTION_TIMEOUT)
         postDelayed(showLoadingContainerRunnable, Constants.SHOW_PROGRESS_BAR_DELAY)
+    }
+
+    private fun askForMobileData(webView: WebView) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.mobile_data_title)
+            .setMessage(R.string.mobile_data_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.mobile_data_yes) { _, _ ->
+                NetworkState.allowedThisSession = true
+                webView.loadServer()
+            }
+            .setNeutralButton(R.string.mobile_data_always) { _, _ ->
+                appPreferences.mobileDataPolicy = MobileDataPolicy.ALWAYS
+                webView.loadServer()
+            }
+            .setNegativeButton(R.string.mobile_data_downloads) { _, _ ->
+                activityEventHandler.emit(ActivityEvent.OpenDownloadsWifiOnly)
+            }
+            .show()
     }
 
     private fun showOutdatedWebViewDialog(webView: WebView) {

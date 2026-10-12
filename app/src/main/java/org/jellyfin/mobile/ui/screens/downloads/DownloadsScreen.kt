@@ -56,6 +56,9 @@ import org.jellyfin.mobile.downloads.DownloadsViewModel
 import androidx.compose.material.TextField
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.runtime.LaunchedEffect
+import org.jellyfin.mobile.downloads.OfflineEntry
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,8 +71,10 @@ import org.jellyfin.sdk.model.api.MediaType
 fun DownloadsScreen(
     viewModel: DownloadsViewModel = viewModel(),
     onBackPressed: () -> Unit = {},
-    offline: Boolean = false,
+    offlineReason: OfflineReason? = null,
     onRetryConnection: () -> Unit = {},
+    startInStorage: Boolean = false,
+    openCleanup: Boolean = false,
 ) {
     val downloads by viewModel.downloads.collectAsState()
     val storageLocation by viewModel.storageLocation.collectAsState()
@@ -82,7 +87,13 @@ fun DownloadsScreen(
     var showMenu by remember { mutableStateOf(false) }
 
     // Browsing like the web client: libraries, then albums, artists, genres or series, then their downloads
-    val locations = remember { mutableStateListOf<BrowseLocation>(BrowseLocation.Root) }
+    val locations = remember {
+        mutableStateListOf<BrowseLocation>(BrowseLocation.Root).apply { if (startInStorage) add(BrowseLocation.Storage) }
+    }
+    val follows by viewModel.follows.collectAsState()
+    val availableBytes by viewModel.availableBytes.collectAsState()
+    var cleanup by remember { mutableStateOf<Pair<List<OfflineEntry>, Set<Long>>?>(null) }
+    var cleanupOffered by rememberSaveable { mutableStateOf(!openCleanup) }
     val location = locations.last()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -104,6 +115,31 @@ fun DownloadsScreen(
     }
 
     val selectionMode = selection.isNotEmpty()
+
+    LaunchedEffect(location) {
+        if (location is BrowseLocation.Storage) viewModel.refreshAvailableBytes()
+    }
+
+    // Opened from "Choose…" of the watched offer: the deletion dialog with the watched downloads
+    LaunchedEffect(index, playStates) {
+        if (!cleanupOffered && index.entries.isNotEmpty()) {
+            cleanupOffered = true
+            val watched = index.entries.filter { !it.isAudio && viewModel.progressOf(it.download, playStates)?.played == true }
+            if (watched.isNotEmpty()) cleanup = watched to watched.map { it.download.id }.toSet()
+        }
+    }
+
+    cleanup?.let { (entries, preselected) ->
+        CleanupDialog(
+            entries = entries,
+            preselected = preselected,
+            onConfirm = { chosen ->
+                viewModel.deleteDownloads(chosen)
+                cleanup = null
+            },
+            onDismiss = { cleanup = null },
+        )
+    }
 
     fun goBack() {
         when {
@@ -196,6 +232,7 @@ fun DownloadsScreen(
                                     is BrowseLocation.Root -> stringResource(R.string.downloads)
                                     is BrowseLocation.Library -> location.name
                                     is BrowseLocation.Group -> location.title
+                                    is BrowseLocation.Storage -> stringResource(R.string.downloads_storage)
                                 },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -234,6 +271,11 @@ fun DownloadsScreen(
                         if (!selectionMode && !searchOpen) {
                             IconButton(onClick = { searchOpen = true }) {
                                 Icon(imageVector = Icons.Outlined.Search, contentDescription = stringResource(R.string.downloads_search))
+                            }
+                            if (location !is BrowseLocation.Storage) {
+                                IconButton(onClick = { locations.add(BrowseLocation.Storage) }) {
+                                    Icon(imageVector = Icons.Outlined.Storage, contentDescription = stringResource(R.string.downloads_storage))
+                                }
                             }
                         }
                         AnimatedVisibility(
@@ -316,8 +358,9 @@ fun DownloadsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
-                if (offline) {
+                if (offlineReason != null) {
                     OfflineCard(
+                        reason = offlineReason,
                         onRetry = onRetryConnection,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
@@ -335,28 +378,41 @@ fun DownloadsScreen(
                     )
                 }
 
-                if (downloads.isEmpty()) {
+                val browseActions = BrowseActions(
+                    navigate = { locations.add(it) },
+                    open = { viewModel.openDownload(it) },
+                    retry = { viewModel.download(it) },
+                    playTracks = { tracks, start, shuffle -> viewModel.playTracks(tracks, start, shuffle) },
+                    removeAll = { pendingRemoval = it },
+                    toggleSelection = { download ->
+                        if (selection.contains(download.id)) selection.remove(download.id)
+                        else selection.add(download.id)
+                    },
+                    progress = { download -> viewModel.progressOf(download, playStates) },
+                    openFromStart = { viewModel.openFromStart(it) },
+                    isFavorite = { viewModel.isFavorite(it, pendingFavorites) },
+                    toggleFavorite = { viewModel.toggleFavorite(it, pendingFavorites) },
+                    isFollowed = { entry -> follows.any { it.seriesId == entry.item.seriesId?.toString() } },
+                    setFollowed = { entry, followed -> viewModel.setFollowed(entry.download, followed) },
+                    newEpisodesEnabled = viewModel.newEpisodesEnabled,
+                )
+                if (location is BrowseLocation.Storage && searchQuery.isBlank()) {
+                    StorageView(
+                        index = index,
+                        actions = browseActions,
+                        availableBytes = availableBytes,
+                        limitBytes = viewModel.storageLimitBytes,
+                        onCleanup = { entries, preselected -> cleanup = entries to preselected },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (downloads.isEmpty()) {
                     DownloadsEmpty(modifier = Modifier.weight(1f))
                 } else {
                     DownloadsBrowser(
                         index = index,
                         location = location,
                         searchQuery = searchQuery,
-                        actions = BrowseActions(
-                            navigate = { locations.add(it) },
-                            open = { viewModel.openDownload(it) },
-                            retry = { viewModel.download(it) },
-                            playTracks = { tracks, start, shuffle -> viewModel.playTracks(tracks, start, shuffle) },
-                            removeAll = { pendingRemoval = it },
-                            progress = { download -> viewModel.progressOf(download, playStates) },
-                            openFromStart = { viewModel.openFromStart(it) },
-                            isFavorite = { viewModel.isFavorite(it, pendingFavorites) },
-                            toggleFavorite = { viewModel.toggleFavorite(it, pendingFavorites) },
-                            toggleSelection = { download ->
-                                if (selection.contains(download.id)) selection.remove(download.id)
-                                else selection.add(download.id)
-                            },
-                        ),
+                        actions = browseActions,
                         selection = selection,
                         modifier = Modifier.weight(1f),
                     )
@@ -366,9 +422,13 @@ fun DownloadsScreen(
     )
 }
 
-/** Shown when the downloads were opened because the server did not answer. */
+/** Why the downloads were opened instead of the web client. */
+enum class OfflineReason { UNREACHABLE, WIFI_ONLY }
+
+/** Shown when the downloads were opened because the server did not answer, or mobile data is not to be used. */
 @Composable
 fun OfflineCard(
+    reason: OfflineReason,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) = Card(
@@ -379,12 +439,12 @@ fun OfflineCard(
     Row(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.downloads_offline_title),
+                text = stringResource(if (reason == OfflineReason.WIFI_ONLY) R.string.downloads_wifi_only_title else R.string.downloads_offline_title),
                 style = MaterialTheme.typography.subtitle1,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = stringResource(R.string.downloads_offline_description),
+                text = stringResource(if (reason == OfflineReason.WIFI_ONLY) R.string.downloads_wifi_only_description else R.string.downloads_offline_description),
                 style = MaterialTheme.typography.body2,
             )
         }
