@@ -31,6 +31,9 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
+import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.icons.filled.CheckCircle
+import org.jellyfin.mobile.downloads.OfflinePlayback
 import androidx.compose.material.ScrollableTabRow
 import androidx.compose.material.Tab
 import androidx.compose.material.Text
@@ -81,6 +84,8 @@ class BrowseActions(
     val playTracks: (List<OfflineEntry>, Int, Boolean) -> Unit,
     val removeAll: (List<DownloadEntity>) -> Unit,
     val toggleSelection: (DownloadEntity) -> Unit,
+    val progress: (DownloadEntity) -> OfflinePlayback.Progress? = { null },
+    val openFromStart: (DownloadEntity) -> Unit = open,
 )
 
 @Composable
@@ -225,7 +230,16 @@ private fun LibraryView(index: OfflineIndex, library: String, actions: BrowseAct
             )
             LibraryTab.MOVIES -> PosterGrid(
                 cards = remember(entries) { index.movies(entries) }.map { entry ->
-                    Card(entry.download.id.toString(), entry.item.name.orEmpty(), entry.item.productionYear?.toString(), entry.image) {
+                    val progress = actions.progress(entry.download)
+                    Card(
+                        id = entry.download.id.toString(),
+                        title = entry.item.name.orEmpty(),
+                        subtitle = entry.item.productionYear?.toString(),
+                        image = entry.image,
+                        progress = progress?.takeIf { !it.played }?.percent,
+                        played = progress?.played == true,
+                        onLongClick = { actions.openFromStart(entry.download) },
+                    ) {
                         actions.open(entry.download)
                     }
                 },
@@ -235,7 +249,16 @@ private fun LibraryView(index: OfflineIndex, library: String, actions: BrowseAct
     }
 }
 
-private class Card(val id: String, val title: String, val subtitle: String?, val image: Uri?, val onClick: () -> Unit)
+private class Card(
+    val id: String,
+    val title: String,
+    val subtitle: String?,
+    val image: Uri?,
+    val progress: Float? = null,
+    val played: Boolean = false,
+    val onLongClick: (() -> Unit)? = null,
+    val onClick: () -> Unit,
+)
 
 @Composable
 private fun GroupGrid(groups: List<OfflineGroup>, square: Boolean, onOpen: (OfflineGroup) -> Unit) {
@@ -249,6 +272,7 @@ private fun GroupGrid(groups: List<OfflineGroup>, square: Boolean, onOpen: (Offl
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PosterGrid(cards: List<Card>, square: Boolean) {
     LazyVerticalGrid(
@@ -259,13 +283,20 @@ private fun PosterGrid(cards: List<Card>, square: Boolean) {
         modifier = Modifier.fillMaxSize(),
     ) {
         items(cards, key = { it.id }) { card ->
-            Column(modifier = Modifier.clickable(onClick = card.onClick)) {
-                Cover(
-                    image = card.image,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(if (square) 1f else 2f / 3f),
-                )
+            Column(modifier = Modifier.combinedClickable(onClick = card.onClick, onLongClick = card.onLongClick)) {
+                Box {
+                    Cover(
+                        image = card.image,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(if (square) 1f else 2f / 3f),
+                    )
+                    WatchedMarks(
+                        progress = card.progress,
+                        played = card.played,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 Text(
                     text = card.title,
                     style = MaterialTheme.typography.subtitle2,
@@ -312,12 +343,19 @@ private fun GroupView(index: OfflineIndex, location: BrowseLocation.Group, actio
     val music = entries.all { it.isAudio }
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
+            val next = if (location.kind == GroupKind.SERIES) nextEpisode(entries, actions) else null
             GroupHeader(
                 group = group,
                 square = music,
                 showPlay = music,
                 onPlay = { shuffle -> actions.playTracks(entries, 0, shuffle) },
                 onRemove = { actions.removeAll(entries.map { it.download }) },
+                watch = next?.let { (entry, resume) ->
+                    val label = episodeLabel(entry)
+                    (if (resume) stringResource(R.string.downloads_continue, label) else stringResource(R.string.downloads_watch, label)) to {
+                        actions.open(entry.download)
+                    }
+                },
             )
         }
 
@@ -356,7 +394,14 @@ private fun GroupView(index: OfflineIndex, location: BrowseLocation.Group, actio
 }
 
 @Composable
-private fun GroupHeader(group: OfflineGroup, square: Boolean, showPlay: Boolean, onPlay: (Boolean) -> Unit, onRemove: () -> Unit) {
+private fun GroupHeader(
+    group: OfflineGroup,
+    square: Boolean,
+    showPlay: Boolean,
+    onPlay: (Boolean) -> Unit,
+    onRemove: () -> Unit,
+    watch: Pair<String, () -> Unit>? = null,
+) {
     val context = LocalContext.current
     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Cover(group.image, Modifier.width(120.dp).aspectRatio(if (square) 1f else 2f / 3f))
@@ -373,6 +418,13 @@ private fun GroupHeader(group: OfflineGroup, square: Boolean, showPlay: Boolean,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                watch?.let { (label, onWatch) ->
+                    Button(onClick = onWatch) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
                 if (showPlay) {
                     Button(onClick = { onPlay(false) }) {
                         Icon(Icons.Filled.PlayArrow, contentDescription = null)
@@ -483,6 +535,27 @@ private fun EntryRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (!entry.isAudio) {
+                val progress = actions.progress(entry.download)
+                val percent = progress?.percent
+                if (progress?.played != true && percent != null) {
+                    LinearProgressIndicator(
+                        progress = percent,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .height(3.dp),
+                    )
+                }
+            }
+        }
+        if (!entry.isAudio && actions.progress(entry.download)?.played == true) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = stringResource(R.string.downloads_played),
+                tint = MaterialTheme.colors.primary,
+                modifier = Modifier.padding(start = 8.dp).size(20.dp),
+            )
         }
         item.runTimeTicks?.let { ticks ->
             Text(
@@ -492,6 +565,54 @@ private fun EntryRow(
                 modifier = Modifier.padding(start = 8.dp),
             )
         }
+    }
+}
+
+/** A thin progress line at the bottom of a cover, or a check when finished. */
+@Composable
+private fun WatchedMarks(progress: Float?, played: Boolean, modifier: Modifier) {
+    Box(modifier = modifier) {
+        if (played) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = stringResource(R.string.downloads_played),
+                tint = MaterialTheme.colors.primary,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .background(MaterialTheme.colors.background, RoundedCornerShape(50))
+                    .size(22.dp),
+            )
+        } else if (progress != null) {
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(4.dp),
+            )
+        }
+    }
+}
+
+/** The episode to continue with: one left midway, or the one after the last finished, or the first. */
+private fun nextEpisode(episodes: List<OfflineEntry>, actions: BrowseActions): Pair<OfflineEntry, Boolean>? {
+    if (episodes.isEmpty()) return null
+    val progress = episodes.map { actions.progress(it.download) }
+    val lastPlayed = progress.indexOfLast { it?.played == true }
+    val candidates = episodes.indices.drop(lastPlayed + 1).ifEmpty { episodes.indices.toList() }
+    val index = candidates.firstOrNull { progress[it]?.played != true } ?: candidates.first()
+    val resume = progress[index]?.let { !it.played && it.positionTicks > 0 } == true
+    return episodes[index] to resume
+}
+
+private fun episodeLabel(entry: OfflineEntry): String {
+    val season = entry.item.parentIndexNumber
+    val episode = entry.item.indexNumber
+    return when {
+        season != null && episode != null -> "S$season:E$episode"
+        episode != null -> "E$episode"
+        else -> entry.item.name.orEmpty()
     }
 }
 

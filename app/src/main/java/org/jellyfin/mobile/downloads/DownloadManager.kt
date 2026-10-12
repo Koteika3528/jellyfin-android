@@ -87,15 +87,16 @@ class DownloadManager(
     }
 
     /**
-     * Fills in what older downloads were made without (genres, overview), so they can be browsed by genre
-     * offline. Only for the current account, and quietly does nothing without a connection.
+     * Updates the downloaded items from the server: what was watched elsewhere, and what older downloads
+     * were made without (genres, overview, to browse by genre offline). Only for the current account,
+     * and quietly does nothing without a connection.
      */
     suspend fun refreshMetadata() = withContext(Dispatchers.IO) {
         val serverId = appPreferences.currentServerId ?: return@withContext
         val userId = appPreferences.currentUserId ?: return@withContext
         val stale = downloadDao.getCompletedDownloads()
             .map { it.download }
-            .filter { it.serverId == serverId && it.userId == userId && it.item.genres == null }
+            .filter { it.serverId == serverId && it.userId == userId }
 
         for (chunk in stale.chunked(ITEMS_BATCH)) {
             val items = runCatching {

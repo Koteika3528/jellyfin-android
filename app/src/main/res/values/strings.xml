@@ -214,4 +214,7 @@
     <string name="downloads_offline_title">Can\'t reach the server</string>
     <string name="downloads_offline_description">Your downloads still play without a connection.</string>
     <string name="downloads_offline_retry">Retry</string>
+    <string name="downloads_continue">Continue %1$s</string>
+    <string name="downloads_watch">Watch %1$s</string>
+    <string name="downloads_played">Watched</string>
 </resources>

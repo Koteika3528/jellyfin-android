@@ -202,4 +202,7 @@
     <string name="downloads_offline_title">Нет связи с сервером</string>
     <string name="downloads_offline_description">Скачанное можно смотреть и слушать и без сети.</string>
     <string name="downloads_offline_retry">Повторить</string>
+    <string name="downloads_continue">Продолжить %1$s</string>
+    <string name="downloads_watch">Смотреть %1$s</string>
+    <string name="downloads_played">Просмотрено</string>
 </resources>

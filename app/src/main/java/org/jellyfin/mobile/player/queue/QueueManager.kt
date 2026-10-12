@@ -34,6 +34,8 @@ import org.jellyfin.sdk.model.api.MediaStreamProtocol
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import org.jellyfin.mobile.downloads.OfflinePlayback
+import org.jellyfin.sdk.model.extensions.ticks
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -49,6 +51,7 @@ class QueueManager(
     private val mediaSourceResolver: MediaSourceResolver by inject()
     private val deviceProfileBuilder: DeviceProfileBuilder by inject()
     private val downloadDao: DownloadDao by inject()
+    private val offlinePlayback: OfflinePlayback by inject()
     private val deviceProfile = deviceProfileBuilder.getDeviceProfile()
 
     private var currentQueue: List<UUID> = emptyList()
@@ -93,6 +96,7 @@ class QueueManager(
             true -> playOptions.mediaSourceId?.let {
                 startDownloadPlayback(
                     itemId = itemId,
+                    startTime = playOptions.startPosition,
                     playWhenReady = true,
                 )
             }
@@ -126,6 +130,10 @@ class QueueManager(
         }
 
         val mainFile = files.find { it.type == DownloadFileType.ITEM } ?: return PlayerException.NetworkFailure()
+
+        // Without an explicit start, continue where it was left (also without the server)
+        @Suppress("NAME_SHADOWING")
+        val startTime = startTime ?: offlinePlayback.resumePositionTicks(itemId)?.ticks
 
         val mediaSource = LocalJellyfinMediaSource(
             itemId = download.itemId,

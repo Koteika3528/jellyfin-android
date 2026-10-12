@@ -75,6 +75,7 @@ fun DownloadsScreen(
     val storageLocation by viewModel.storageLocation.collectAsState()
     val storageLocationAccessible by viewModel.storageLocationAccessible.collectAsState()
     val nowPlaying by viewModel.nowPlaying.collectAsState()
+    val playStates by viewModel.playStates.collectAsState()
     val selection = remember { mutableStateSetOf<Long>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -343,6 +344,8 @@ fun DownloadsScreen(
                             retry = { viewModel.download(it) },
                             playTracks = { tracks, start, shuffle -> viewModel.playTracks(tracks, start, shuffle) },
                             removeAll = { pendingRemoval = it },
+                            progress = { download -> viewModel.progressOf(download, playStates) },
+                            openFromStart = { viewModel.openFromStart(it) },
                             toggleSelection = { download ->
                                 if (selection.contains(download.id)) selection.remove(download.id)
                                 else selection.add(download.id)

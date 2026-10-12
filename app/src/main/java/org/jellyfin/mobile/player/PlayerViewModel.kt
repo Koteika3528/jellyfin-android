@@ -49,6 +49,8 @@ import org.jellyfin.mobile.player.mediasegments.MediaSegmentRepository
 import org.jellyfin.mobile.player.queue.QueueManager
 import org.jellyfin.mobile.player.source.JellyfinMediaSource
 import org.jellyfin.mobile.player.source.RemoteJellyfinMediaSource
+import org.jellyfin.mobile.player.source.LocalJellyfinMediaSource
+import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.player.ui.DecoderType
 import org.jellyfin.mobile.player.ui.DisplayPreferences
 import org.jellyfin.mobile.player.ui.PlayState
@@ -105,6 +107,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application),
     private val userApi: UserApi = apiClient.userApi
 
     private val appPreferences: AppPreferences by inject()
+    private val offlinePlayback: OfflinePlayback by inject()
     private val lifecycleObserver = PlayerLifecycleObserver(this)
     private val audioManager: AudioManager by lazy { getApplication<Application>().getSystemService()!! }
     val notificationHelper: PlayerNotificationHelper by lazy { PlayerNotificationHelper(this) }
@@ -329,6 +332,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application),
     }
 
     private fun startProgressUpdates() {
+        if (mediaSourceOrNull is LocalJellyfinMediaSource) {
+            // Downloads remember their position on the device, the server learns it later
+            progressUpdateJob = viewModelScope.launch {
+                while (true) {
+                    delay(Constants.PLAYER_TIME_UPDATE_RATE)
+                    saveOfflineProgress(sync = false)
+                }
+            }
+            return
+        }
         if (mediaSourceOrNull != null && mediaSourceOrNull !is RemoteJellyfinMediaSource) return
         progressUpdateJob = viewModelScope.launch {
             while (true) {
@@ -473,7 +486,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
+    /** Where a downloaded item stopped, kept on the device and sent to the server when it is reachable. */
+    private fun saveOfflineProgress(sync: Boolean) {
+        val mediaSource = mediaSourceOrNull as? LocalJellyfinMediaSource ?: return
+        val player = playerOrNull ?: return
+        val finished = player.playbackState == Player.STATE_ENDED
+        offlinePlayback.save(
+            itemId = mediaSource.itemId,
+            positionTicks = player.currentPosition.milliseconds.inWholeTicks,
+            runTimeTicks = mediaSource.runTime.inWholeTicks.takeIf { it > 0 },
+            finished = finished,
+        )
+        if (sync) offlinePlayback.syncInBackground()
+    }
+
     private fun reportPlaybackStop() {
+        if (mediaSourceOrNull is LocalJellyfinMediaSource) {
+            saveOfflineProgress(sync = true)
+            return
+        }
         val mediaSource = mediaSourceOrNull as? RemoteJellyfinMediaSource ?: return
         val player = playerOrNull ?: return
         val hasFinished = player.playbackState == Player.STATE_ENDED

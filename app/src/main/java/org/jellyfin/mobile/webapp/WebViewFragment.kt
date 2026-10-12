@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.downloads.DownloadStates
+import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.applyDefault
@@ -68,6 +69,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private val mediaSegments: MediaSegments by inject()
     private val activityEventHandler: ActivityEventHandler by inject()
     private val downloadDao: DownloadDao by inject()
+    private val offlinePlayback: OfflinePlayback by inject()
 
     lateinit var server: ServerEntity
         private set
@@ -109,6 +111,8 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
                 webView.removeCallbacks(timeoutRunnable)
                 webView.removeCallbacks(showLoadingContainerRunnable)
                 connected = true
+                // The server is reachable: send what was watched from the downloads meanwhile
+                offlinePlayback.syncInBackground()
                 runOnUiThread {
                     webViewBinding.loadingContainer.isVisible = false
                     webView.fadeIn()

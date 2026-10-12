@@ -16,6 +16,8 @@ import org.jellyfin.mobile.app.StorageManager
 import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.data.entity.DownloadFiles
+import org.jellyfin.mobile.data.entity.PlayStateEntity
+import java.util.UUID
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.interaction.PlayOptions
@@ -31,9 +33,35 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     private val activityEventHandler: ActivityEventHandler by inject()
     private val storageManager: StorageManager by inject()
     private val offlineLibrary: OfflineLibrary by inject()
+    private val offlinePlayback: OfflinePlayback by inject()
     private val musicPlayer = DownloadedMusicPlayer(get())
 
     val nowPlaying: StateFlow<DownloadedMusicPlayer.NowPlaying?> = musicPlayer.nowPlaying
+
+    /** Where downloads were left: shown on rows and used to continue a show. */
+    val playStates: StateFlow<Map<UUID, PlayStateEntity>> = offlinePlayback.observeStates()
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    fun progressOf(download: DownloadEntity, states: Map<UUID, PlayStateEntity>): OfflinePlayback.Progress? =
+        offlinePlayback.progressOf(download, states[download.itemId])
+
+    /** Plays a downloaded video from its beginning instead of where it was left. */
+    fun openFromStart(download: DownloadEntity) {
+        activityEventHandler.emit(
+            ActivityEvent.LaunchNativePlayer(
+                PlayOptions(
+                    ids = listOf(download.itemId),
+                    mediaSourceId = download.itemId.toString(),
+                    startIndex = 0,
+                    startPosition = kotlin.time.Duration.ZERO,
+                    audioStreamIndex = null,
+                    subtitleStreamIndex = null,
+                    playFromDownloads = true,
+                ),
+            ),
+        )
+    }
 
     init {
         musicPlayer.connect()
@@ -48,6 +76,8 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         viewModelScope.launch {
             runCatching {
                 offlineLibrary.restore()
+                // First what was watched here, then what the server knows (also from other devices)
+                offlinePlayback.sync()
                 downloadManager.refreshMetadata()
                 offlineLibrary.write()
             }
