@@ -16,4 +16,7 @@ sealed class ActivityEvent {
     data object SelectServer : ActivityEvent()
     data object ExitApp : ActivityEvent()
     data object OpenDownloads : ActivityEvent()
+
+    /** The server did not answer: show the downloads, if there are any, instead of only the server selection. */
+    data object ServerUnreachable : ActivityEvent()
 }

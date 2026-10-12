@@ -211,4 +211,7 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <string name="downloads_offline_title">Can\'t reach the server</string>
+    <string name="downloads_offline_description">Your downloads still play without a connection.</string>
+    <string name="downloads_offline_retry">Retry</string>
 </resources>

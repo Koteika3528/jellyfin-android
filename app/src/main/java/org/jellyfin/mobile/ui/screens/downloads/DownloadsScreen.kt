@@ -68,6 +68,8 @@ import org.jellyfin.sdk.model.api.MediaType
 fun DownloadsScreen(
     viewModel: DownloadsViewModel = viewModel(),
     onBackPressed: () -> Unit = {},
+    offline: Boolean = false,
+    onRetryConnection: () -> Unit = {},
 ) {
     val downloads by viewModel.downloads.collectAsState()
     val storageLocation by viewModel.storageLocation.collectAsState()
@@ -309,6 +311,13 @@ fun DownloadsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
+                if (offline) {
+                    OfflineCard(
+                        onRetry = onRetryConnection,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+
                 if (storageLocation == null) {
                     StorageLocationNotSetCard(
                         onFix = { storageLocationPicker.launch(null) },
@@ -346,6 +355,34 @@ fun DownloadsScreen(
             }
         },
     )
+}
+
+/** Shown when the downloads were opened because the server did not answer. */
+@Composable
+fun OfflineCard(
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) = Card(
+    modifier = modifier.fillMaxWidth(),
+    elevation = 4.dp,
+    backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.15f),
+) {
+    Row(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.downloads_offline_title),
+                style = MaterialTheme.typography.subtitle1,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.downloads_offline_description),
+                style = MaterialTheme.typography.body2,
+            )
+        }
+        TextButton(onClick = onRetry) {
+            Text(text = stringResource(R.string.downloads_offline_retry))
+        }
+    }
 }
 
 @Composable

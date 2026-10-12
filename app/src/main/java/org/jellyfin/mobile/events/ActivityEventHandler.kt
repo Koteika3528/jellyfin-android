@@ -10,10 +10,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jellyfin.mobile.MainActivity
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.bridge.JavascriptCallback
+import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.downloads.DownloadsFragment
 import org.jellyfin.mobile.player.ui.PlayerFragment
 import org.jellyfin.mobile.player.ui.PlayerFullscreenHelper
@@ -22,6 +25,7 @@ import org.jellyfin.mobile.utils.Constants
 import org.jellyfin.mobile.utils.extensions.addFragment
 import org.jellyfin.mobile.utils.requestDownload
 import org.jellyfin.mobile.webapp.WebappFunctionChannel
+import org.koin.android.ext.android.get
 import timber.log.Timber
 
 class ActivityEventHandler(
@@ -82,6 +86,16 @@ class ActivityEventHandler(
             }
             ActivityEvent.OpenDownloads -> {
                 supportFragmentManager.addFragment<DownloadsFragment>()
+            }
+            ActivityEvent.ServerUnreachable -> {
+                lifecycleScope.launch {
+                    val downloadDao: DownloadDao = get()
+                    val hasDownloads = withContext(Dispatchers.IO) { downloadDao.getCompletedDownloads().isNotEmpty() }
+                    val alreadyOpen = supportFragmentManager.findFragmentById(R.id.fragment_container) is DownloadsFragment
+                    if (hasDownloads && !alreadyOpen && !supportFragmentManager.isStateSaved) {
+                        supportFragmentManager.addFragment<DownloadsFragment>(DownloadsFragment.offlineArguments())
+                    }
+                }
             }
             is ActivityEvent.CastMessage -> {
                 val action = event.action

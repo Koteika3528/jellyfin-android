@@ -37,6 +37,8 @@ import org.jellyfin.mobile.utils.AndroidVersion
 import org.jellyfin.mobile.utils.BackPressInterceptor
 import org.jellyfin.mobile.utils.Constants
 import org.jellyfin.mobile.utils.Constants.FRAGMENT_WEB_VIEW_EXTRA_SERVER
+import org.jellyfin.mobile.events.ActivityEvent
+import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.applyDefault
 import org.jellyfin.mobile.utils.applyWindowInsetsAsMargins
 import org.jellyfin.mobile.utils.dip
@@ -58,6 +60,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private val nativePlayer: NativePlayer by inject()
     private lateinit var externalPlayer: ExternalPlayer
     private val mediaSegments: MediaSegments by inject()
+    private val activityEventHandler: ActivityEventHandler by inject()
 
     lateinit var server: ServerEntity
         private set
@@ -257,6 +260,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private fun handleError() {
         connected = false
         onSelectServer(error = true)
+        activityEventHandler.emit(ActivityEvent.ServerUnreachable)
     }
 
     override fun onShowFileChooser(intent: Intent, filePathCallback: ValueCallback<Array<Uri>>) {

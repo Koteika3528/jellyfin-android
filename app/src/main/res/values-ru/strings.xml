@@ -199,4 +199,7 @@
         <item quantity="many">%1$d файлов</item>
         <item quantity="other">%1$d файла</item>
     </plurals>
+    <string name="downloads_offline_title">Нет связи с сервером</string>
+    <string name="downloads_offline_description">Скачанное можно смотреть и слушать и без сети.</string>
+    <string name="downloads_offline_retry">Повторить</string>
 </resources>
