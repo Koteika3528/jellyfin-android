@@ -29,6 +29,9 @@ class DownloadManager(
          * split into separate download chunks.
          */
         private const val ITEMS_BATCH = 25
+
+        /** What a download keeps of its item: files and streams to play it, genres and overview to browse it offline. */
+        private val ITEM_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.PATH, ItemFields.GENRES, ItemFields.OVERVIEW)
     }
 
     suspend fun enqueueItems(
@@ -43,7 +46,7 @@ class DownloadManager(
 
             val response by api.itemsApi.getItems(
                 ids = itemsChunk,
-                fields = setOf(ItemFields.MEDIA_SOURCES, ItemFields.PATH),
+                fields = ITEM_FIELDS,
             )
 
             // Sanity check, this shouldn't happen really
@@ -83,7 +86,30 @@ class DownloadManager(
         }
     }
 
-    suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {
+    /**
+     * Fills in what older downloads were made without (genres, overview), so they can be browsed by genre
+     * offline. Only for the current account, and quietly does nothing without a connection.
+     */
+    suspend fun refreshMetadata() = withContext(Dispatchers.IO) {
+        val serverId = appPreferences.currentServerId ?: return@withContext
+        val userId = appPreferences.currentUserId ?: return@withContext
+        val stale = downloadDao.getCompletedDownloads()
+            .map { it.download }
+            .filter { it.serverId == serverId && it.userId == userId && it.item.genres == null }
+
+        for (chunk in stale.chunked(ITEMS_BATCH)) {
+            val items = runCatching {
+                api.itemsApi.getItems(ids = chunk.map { it.itemId }, fields = ITEM_FIELDS).content.items
+            }.getOrNull() ?: return@withContext
+            val byId = items.associateBy { it.id }
+            for (download in chunk) {
+                val fresh = byId[download.itemId] ?: continue
+                downloadDao.update(download.copy(item = fresh.copy(genres = fresh.genres ?: emptyList())))
+            }
+        }
+    }
+
+        suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {
         downloadDao.update(
             downloadEntity.copy(
                 status = DownloadStatus.QUEUED,

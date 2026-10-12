@@ -171,4 +171,32 @@
     <string name="music_next">Следующий трек</string>
     <string name="music_previous">Предыдущий трек</string>
     <string name="music_stop">Остановить</string>
+    <string name="downloads_active">Скачивается</string>
+    <string name="downloads_libraries">Медиатеки</string>
+    <string name="downloads_tab_albums">Альбомы</string>
+    <string name="downloads_tab_artists">Исполнители</string>
+    <string name="downloads_tab_genres">Жанры</string>
+    <string name="downloads_tab_tracks">Треки</string>
+    <string name="downloads_tab_series">Сериалы</string>
+    <string name="downloads_tab_movies">Фильмы</string>
+    <string name="downloads_tab_other">Другое</string>
+    <string name="downloads_unknown_album">Без альбома</string>
+    <string name="downloads_unknown_artist">Неизвестный исполнитель</string>
+    <string name="downloads_no_genre">Без жанра</string>
+    <string name="downloads_play_all">Слушать</string>
+    <string name="downloads_shuffle">Перемешать</string>
+    <string name="downloads_remove_group">Удалить с устройства</string>
+    <string name="downloads_specials">Спецматериалы</string>
+    <string name="downloads_season">Сезон %1$d</string>
+    <string name="downloads_search">Поиск в загрузках</string>
+    <string name="downloads_library_music">Музыка</string>
+    <string name="downloads_library_movies">Фильмы</string>
+    <string name="downloads_library_shows">Сериалы</string>
+    <string name="downloads_library_other">Другое</string>
+    <plurals name="downloads_items_count">
+        <item quantity="one">%1$d файл</item>
+        <item quantity="few">%1$d файла</item>
+        <item quantity="many">%1$d файлов</item>
+        <item quantity="other">%1$d файла</item>
+    </plurals>
 </resources>

@@ -48,6 +48,7 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         viewModelScope.launch {
             runCatching {
                 offlineLibrary.restore()
+                downloadManager.refreshMetadata()
                 offlineLibrary.write()
             }
         }
@@ -123,6 +124,16 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
             }
             if (startIndex >= 0) musicPlayer.play(items, startIndex)
         }
+    }
+
+    /** Plays downloaded tracks in the given order (an album, an artist, a genre, search results). */
+    fun playTracks(tracks: List<OfflineEntry>, startIndex: Int, shuffle: Boolean) {
+        val start = tracks.getOrNull(startIndex)
+        val ordered = if (shuffle) tracks.shuffled() else tracks
+        val items = ordered.mapNotNull { DownloadedMusicPlayer.toMediaItem(it.files) }
+        if (items.isEmpty()) return
+        val index = if (shuffle || start == null) 0 else ordered.indexOf(start).coerceAtLeast(0)
+        musicPlayer.play(items, index.coerceAtMost(items.lastIndex))
     }
 
     fun togglePlayPause() = musicPlayer.togglePlayPause()

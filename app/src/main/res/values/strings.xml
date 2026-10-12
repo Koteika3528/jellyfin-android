@@ -185,4 +185,30 @@
     <string name="music_next">Next track</string>
     <string name="music_previous">Previous track</string>
     <string name="music_stop">Stop</string>
+    <string name="downloads_active">Downloading</string>
+    <string name="downloads_libraries">Libraries</string>
+    <string name="downloads_tab_albums">Albums</string>
+    <string name="downloads_tab_artists">Artists</string>
+    <string name="downloads_tab_genres">Genres</string>
+    <string name="downloads_tab_tracks">Tracks</string>
+    <string name="downloads_tab_series">Shows</string>
+    <string name="downloads_tab_movies">Movies</string>
+    <string name="downloads_tab_other">Other</string>
+    <string name="downloads_unknown_album">Unknown album</string>
+    <string name="downloads_unknown_artist">Unknown artist</string>
+    <string name="downloads_no_genre">No genre</string>
+    <string name="downloads_play_all">Play</string>
+    <string name="downloads_shuffle">Shuffle</string>
+    <string name="downloads_remove_group">Remove from device</string>
+    <string name="downloads_specials">Specials</string>
+    <string name="downloads_season">Season %1$d</string>
+    <string name="downloads_search">Search downloads</string>
+    <string name="downloads_library_music">Music</string>
+    <string name="downloads_library_movies">Movies</string>
+    <string name="downloads_library_shows">Shows</string>
+    <string name="downloads_library_other">Other</string>
+    <plurals name="downloads_items_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
 </resources>

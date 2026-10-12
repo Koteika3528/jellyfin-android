@@ -53,6 +53,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.downloads.DownloadsViewModel
+import androidx.compose.material.TextField
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
+import org.jellyfin.mobile.data.entity.DownloadEntity
+import org.jellyfin.mobile.downloads.OfflineIndex
+import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.MediaType
 
 @Composable
 fun DownloadsScreen(
@@ -67,7 +77,56 @@ fun DownloadsScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
+    // Browsing like the web client: libraries, then albums, artists, genres or series, then their downloads
+    val locations = remember { mutableStateListOf<BrowseLocation>(BrowseLocation.Root) }
+    val location = locations.last()
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var pendingRemoval by remember { mutableStateOf<List<DownloadEntity>?>(null) }
+
+    val musicLibrary = stringResource(R.string.downloads_library_music)
+    val moviesLibrary = stringResource(R.string.downloads_library_movies)
+    val showsLibrary = stringResource(R.string.downloads_library_shows)
+    val otherLibrary = stringResource(R.string.downloads_library_other)
+    val index = remember(downloads) {
+        OfflineIndex(downloads) { item ->
+            when {
+                item.mediaType == MediaType.AUDIO -> musicLibrary
+                item.type == BaseItemKind.EPISODE -> showsLibrary
+                item.type == BaseItemKind.MOVIE -> moviesLibrary
+                else -> otherLibrary
+            }
+        }
+    }
+
     val selectionMode = selection.isNotEmpty()
+
+    fun goBack() {
+        when {
+            searchOpen -> {
+                searchOpen = false
+                searchQuery = ""
+            }
+            locations.size > 1 -> locations.removeAt(locations.lastIndex)
+            else -> onBackPressed()
+        }
+    }
+
+    BackHandler(enabled = !selectionMode && (searchOpen || locations.size > 1)) {
+        goBack()
+    }
+
+    pendingRemoval?.let { toRemove ->
+        DownloadRemoveDialog(
+            downloads = toRemove,
+            onConfirm = { keepLocalFiles ->
+                toRemove.forEach { download -> viewModel.removeDownload(download, deleteFiles = !keepLocalFiles) }
+                pendingRemoval = null
+                if (locations.size > 1) locations.removeAt(locations.lastIndex)
+            },
+            onDismiss = { pendingRemoval = null },
+        )
+    }
 
     val storageLocationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) viewModel.changeStorageLocation(uri)
@@ -118,8 +177,25 @@ fun DownloadsScreen(
                     ) { isSelectionMode ->
                         if (isSelectionMode) {
                             Text(text = stringResource(R.string.selected_count, selection.size))
+                        } else if (searchOpen) {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text(stringResource(R.string.downloads_search)) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.textFieldColors(backgroundColor = Color.Transparent),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         } else {
-                            Text(text = stringResource(R.string.downloads))
+                            Text(
+                                text = when (location) {
+                                    is BrowseLocation.Root -> stringResource(R.string.downloads)
+                                    is BrowseLocation.Library -> location.name
+                                    is BrowseLocation.Group -> location.title
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 },
@@ -139,7 +215,7 @@ fun DownloadsScreen(
                             }
                         } else {
                             IconButton(
-                                onClick = { onBackPressed() },
+                                onClick = { goBack() },
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -151,6 +227,11 @@ fun DownloadsScreen(
                 },
                 actions = {
                     Row {
+                        if (!selectionMode && !searchOpen) {
+                            IconButton(onClick = { searchOpen = true }) {
+                                Icon(imageVector = Icons.Outlined.Search, contentDescription = stringResource(R.string.downloads_search))
+                            }
+                        }
                         AnimatedVisibility(
                             visible = selectionMode,
                             enter = fadeIn(),
@@ -243,15 +324,22 @@ fun DownloadsScreen(
                 if (downloads.isEmpty()) {
                     DownloadsEmpty(modifier = Modifier.weight(1f))
                 } else {
-                    DownloadsList(
-                        downloads = downloads,
-                        onOpen = { viewModel.openDownload(it) },
-                        onDownload = { viewModel.download(it) },
+                    DownloadsBrowser(
+                        index = index,
+                        location = location,
+                        searchQuery = searchQuery,
+                        actions = BrowseActions(
+                            navigate = { locations.add(it) },
+                            open = { viewModel.openDownload(it) },
+                            retry = { viewModel.download(it) },
+                            playTracks = { tracks, start, shuffle -> viewModel.playTracks(tracks, start, shuffle) },
+                            removeAll = { pendingRemoval = it },
+                            toggleSelection = { download ->
+                                if (selection.contains(download.id)) selection.remove(download.id)
+                                else selection.add(download.id)
+                            },
+                        ),
                         selection = selection,
-                        onToggleSelection = { download ->
-                            if (selection.contains(download.id)) selection.remove(download.id)
-                            else selection.add(download.id)
-                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
