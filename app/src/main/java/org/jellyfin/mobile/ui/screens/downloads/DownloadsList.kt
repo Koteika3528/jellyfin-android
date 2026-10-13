@@ -168,7 +168,14 @@ fun DownloadItem(
                         )
                     }
                 } else {
-                    LinearProgressIndicator()
+                    Column {
+                        LinearProgressIndicator()
+                        Text(
+                            text = stringResource(if (download.status == DownloadStatus.QUEUED) R.string.download_waiting else R.string.download_starting),
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                        )
+                    }
                 }
             } else if (isVerified) {
                 Text(

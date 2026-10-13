@@ -276,4 +276,6 @@
     <string name="download_of_total">%1$s из %2$s</string>
     <string name="download_speed">%1$s/с</string>
     <string name="downloads_active_open">Загружается: %1$d</string>
+    <string name="download_waiting">В очереди</string>
+    <string name="download_starting">Подключение…</string>
 </resources>

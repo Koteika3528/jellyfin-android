@@ -16,6 +16,7 @@ import org.jellyfin.mobile.data.entity.UserEntity
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.model.api.ItemFields
+import timber.log.Timber
 import java.util.UUID
 
 class DownloadManager(
@@ -137,7 +138,21 @@ class DownloadManager(
         }
     }
 
-        suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {
+        /**
+     * Picks up downloads interrupted by the system (the app was killed, the work failed): they stay
+     * "downloading" in the database with nothing running. Called when the app starts.
+     */
+    suspend fun resumeInterrupted() = withContext(Dispatchers.IO) {
+        val pending = downloadDao.getQueuedDownloads()
+        if (pending.isEmpty() || DownloadWorker.isScheduled(context)) return@withContext
+        for ((download, _) in pending) {
+            if (download.status == DownloadStatus.DOWNLOADING) downloadDao.update(download.copy(status = DownloadStatus.QUEUED))
+        }
+        Timber.i("Resuming ${pending.size} interrupted downloads")
+        DownloadWorker.start(context, appPreferences)
+    }
+
+    suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {
         downloadDao.update(
             downloadEntity.copy(
                 status = DownloadStatus.QUEUED,

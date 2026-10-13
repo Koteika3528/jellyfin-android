@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import androidx.work.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
+import timber.log.Timber
 import org.jellyfin.mobile.app.AppPreferences
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -57,6 +58,12 @@ class DownloadWorker(
             .getWorkInfosForUniqueWork(tag)
             .await()
             .any { workInfo -> workInfo.state == WorkInfo.State.RUNNING }
+
+        /** Running, or waiting for its network or a retry. */
+        suspend fun isScheduled(context: Context): Boolean = WorkManager.getInstance(context)
+            .getWorkInfosForUniqueWork(tag)
+            .await()
+            .any { workInfo -> !workInfo.state.isFinished }
     }
 
     private val downloadNotificationManager by inject<DownloadNotificationManager>()
@@ -68,7 +75,15 @@ class DownloadWorker(
         val canProcess = downloadQueue.prepare()
         if (!canProcess) return Result.success()
 
-        setForeground(getForegroundInfo())
+        // Restarted by the system in the background (after the app was killed), Android 12+ may not let
+        // the work become a foreground service: download on without it instead of failing the whole queue
+        try {
+            setForeground(getForegroundInfo())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "Downloading without a foreground service")
+        }
         return try {
             downloadQueue.process()
             Result.success()

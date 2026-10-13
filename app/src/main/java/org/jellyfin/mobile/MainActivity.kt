@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withStarted
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.cast.Chromecast
 import org.jellyfin.mobile.player.cast.IChromecast
@@ -122,6 +123,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }.show()
             return
+        }
+
+        // Downloads interrupted by the system go on
+        lifecycleScope.launch {
+            runCatching { get<DownloadManager>().resumeInterrupted() }
         }
 
         // Bind player service
