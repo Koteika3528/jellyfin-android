@@ -103,9 +103,11 @@ class DownloadQueue(
             }
 
             notificationProgressCallback.onEnd()
+            DownloadProgressTracker.remove(current.id)
             downloadDao.update(current.copy(status = DownloadStatus.DOWNLOADED))
             offlineLibrary.scheduleWrite()
         } catch (e: CancellationException) {
+            DownloadProgressTracker.remove(current.id)
             // The download could've been canceled by the app, in which case we need to refresh it before making changes
             val download = downloadDao.getDownload(downloadWithFiles.download.id)
             if (download?.status == DownloadStatus.DOWNLOADING) {
@@ -113,9 +115,11 @@ class DownloadQueue(
             }
             throw e
         } catch (e: IOException) {
+            DownloadProgressTracker.remove(current.id)
             downloadDao.update(current.copy(status = DownloadStatus.QUEUED))
             throw e
         } catch (e: Exception) {
+            DownloadProgressTracker.remove(current.id)
             downloadDao.update(current.copy(status = DownloadStatus.ERROR))
             throw e
         }

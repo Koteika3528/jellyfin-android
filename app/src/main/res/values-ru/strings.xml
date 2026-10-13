@@ -273,4 +273,7 @@
         <item quantity="many">%1$d просмотренных файлов занимают %2$s. Удалить с устройства?</item>
         <item quantity="other">%1$d просмотренного файла занимают %2$s. Удалить с устройства?</item>
     </plurals>
+    <string name="download_of_total">%1$s из %2$s</string>
+    <string name="download_speed">%1$s/с</string>
+    <string name="downloads_active_open">Загружается: %1$d</string>
 </resources>

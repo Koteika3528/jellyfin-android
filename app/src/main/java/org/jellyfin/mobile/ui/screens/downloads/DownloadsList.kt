@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.ListItem
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -39,6 +41,8 @@ import org.jellyfin.mobile.app.StorageManager
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.data.entity.DownloadFiles
 import org.jellyfin.mobile.downloads.DownloadFileType
+import org.jellyfin.mobile.downloads.DownloadProgressTracker
+import org.jellyfin.mobile.downloads.NotificationProgressCallback
 import org.jellyfin.mobile.downloads.DownloadStatus
 import org.koin.compose.koinInject
 
@@ -148,7 +152,24 @@ fun DownloadItem(
         },
         secondaryText = {
             if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.QUEUED) {
-                LinearProgressIndicator()
+                // Downloaded / total and speed of the running file, for debugging slow downloads
+                val live = DownloadProgressTracker.progress.collectAsState().value[download.id]
+                if (live != null) {
+                    Column {
+                        if (live.total > 0) {
+                            LinearProgressIndicator(progress = (live.downloaded.toFloat() / live.total).coerceIn(0f, 1f))
+                        } else {
+                            LinearProgressIndicator()
+                        }
+                        Text(
+                            text = NotificationProgressCallback.describe(context, live.downloaded, live.total, live.bytesPerSecond),
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    LinearProgressIndicator()
+                }
             } else if (isVerified) {
                 Text(
                     text = Formatter.formatShortFileSize(context, files.sumOf { it.size }),

@@ -233,6 +233,7 @@ fun DownloadsScreen(
                                     is BrowseLocation.Library -> location.name
                                     is BrowseLocation.Group -> location.title
                                     is BrowseLocation.Storage -> stringResource(R.string.downloads_storage)
+                                    is BrowseLocation.Active -> stringResource(R.string.downloads_active)
                                 },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,

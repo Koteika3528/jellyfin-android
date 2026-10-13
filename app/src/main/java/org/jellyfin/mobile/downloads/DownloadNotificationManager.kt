@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.downloads
 
+import android.text.format.Formatter
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -52,7 +53,6 @@ class NotificationProgressCallback(
     private val downloadId: Long,
     private val name: String,
 ) : FileDownloader.ProgressCallback {
-    private var lastProgress = -1
 
     private val builder by lazy {
         NotificationCompat.Builder(context, DownloadNotificationManager.CHANNEL_ID).apply {
@@ -80,29 +80,48 @@ class NotificationProgressCallback(
         }
     }
 
+    private val speed = DownloadProgressTracker.SpeedMeter()
+
     override suspend fun onProgress(downloaded: Long, total: Long) {
-        val progress = (downloaded.toFloat() / (total.toFloat()) * 100).toInt().coerceIn(0, 100)
-
-        if (lastProgress == progress) return
-        lastProgress = progress
-
-        if (progress == 100) {
+        if (downloaded == Long.MAX_VALUE) {
+            DownloadProgressTracker.remove(downloadId)
             builder.apply {
                 setContentText(context.getString(R.string.download_completed))
                 setSubText(null)
                 setProgress(0, 0, false)
                 setSmallIcon(android.R.drawable.stat_sys_download_done)
-            }
-        } else {
-            builder.apply {
-                setContentText(null)
-                setSubText(context.getString(R.string.download_progress, progress))
-                setProgress(100, progress, false)
                 setOngoing(false)
             }
+            notificationManager.notify(DownloadNotificationManager.NOTIFICATION_ID, builder.build())
+            return
+        }
+
+        // About once a second: downloaded / total and the speed, in the notification and the downloads screen
+        if (!speed.sample(downloaded)) return
+        DownloadProgressTracker.update(downloadId, DownloadProgressTracker.Live(downloaded, total, speed.bytesPerSecond))
+
+        val progress = if (total > 0) (downloaded.toFloat() / total * 100).toInt().coerceIn(0, 100) else 0
+        builder.apply {
+            setContentText(describe(context, downloaded, total, speed.bytesPerSecond))
+            setSubText(context.getString(R.string.download_progress, progress))
+            setProgress(100, progress, total <= 0)
+            setOngoing(true)
         }
 
         notificationManager.notify(DownloadNotificationManager.NOTIFICATION_ID, builder.build())
+    }
+
+    companion object {
+        /** "120 MB of 1.4 GB · 5.2 MB/s" */
+        fun describe(context: Context, downloaded: Long, total: Long, bytesPerSecond: Long): String {
+            val done = Formatter.formatShortFileSize(context, downloaded)
+            val size = if (total > 0) context.getString(R.string.download_of_total, done, Formatter.formatShortFileSize(context, total)) else done
+            return if (bytesPerSecond > 0) {
+                size + " · " + context.getString(R.string.download_speed, Formatter.formatShortFileSize(context, bytesPerSecond))
+            } else {
+                size
+            }
+        }
     }
 
     suspend fun onEnd() = onProgress(Long.MAX_VALUE, Long.MAX_VALUE)

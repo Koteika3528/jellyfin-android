@@ -283,4 +283,7 @@
         <item quantity="one">%1$d watched item takes %2$s. Delete it from the device?</item>
         <item quantity="other">%1$d watched items take %2$s. Delete them from the device?</item>
     </plurals>
+    <string name="download_of_total">%1$s of %2$s</string>
+    <string name="download_speed">%1$s/s</string>
+    <string name="downloads_active_open">%1$d downloading</string>
 </resources>

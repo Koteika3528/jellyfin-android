@@ -32,7 +32,9 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import org.jellyfin.mobile.downloads.OfflinePlayback
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.data.entity.DownloadEntity
+import org.jellyfin.mobile.downloads.DownloadProgressTracker
+import org.jellyfin.mobile.downloads.NotificationProgressCallback
 import org.jellyfin.mobile.downloads.OfflineEntry
 import org.jellyfin.mobile.downloads.OfflineGroup
 import org.jellyfin.mobile.downloads.OfflineIndex
@@ -77,6 +82,9 @@ sealed interface BrowseLocation {
     data class Library(val name: String) : BrowseLocation
     data class Group(val library: String, val kind: GroupKind, val key: String, val title: String) : BrowseLocation
     data object Storage : BrowseLocation
+
+    /** Running, queued and failed downloads. */
+    data object Active : BrowseLocation
 }
 
 /** What the browser can ask the screen to do. */
@@ -113,6 +121,7 @@ fun DownloadsBrowser(
         location is BrowseLocation.Group -> GroupView(index, location, actions, selection, modifier)
         // The storage page is drawn by the screen, which owns its dialog
         location is BrowseLocation.Storage -> Unit
+        location is BrowseLocation.Active -> ActiveView(index, actions, selection, modifier)
     }
 }
 
@@ -121,18 +130,9 @@ fun DownloadsBrowser(
 @Composable
 private fun RootView(index: OfflineIndex, actions: BrowseActions, selection: Set<Long>, modifier: Modifier) {
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+        // Running downloads take one row here, their list is a page of its own
         if (index.active.isNotEmpty()) {
-            item { SectionHeader(stringResource(R.string.downloads_active)) }
-            items(index.active, key = { "active-" + it.download.id }) { files ->
-                DownloadItem(
-                    downloadFiles = files,
-                    onOpen = { actions.open(files.download) },
-                    onDownload = { actions.retry(files.download) },
-                    onToggleSelection = { actions.toggleSelection(files.download) },
-                    isSelected = files.download.id in selection,
-                    selectionMode = selection.isNotEmpty(),
-                )
-            }
+            item(key = "active") { ActiveRow(index, onClick = { actions.navigate(BrowseLocation.Active) }) }
             item { SectionHeader(stringResource(R.string.downloads_libraries)) }
         }
         items(index.libraries, key = { "library-$it" }) { library ->
@@ -143,6 +143,57 @@ private fun RootView(index: OfflineIndex, actions: BrowseActions, selection: Set
                 count = entries.size,
                 size = entries.sumOf { it.size },
                 onClick = { actions.navigate(BrowseLocation.Library(library)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveRow(index: OfflineIndex, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val live = DownloadProgressTracker.progress.collectAsState().value
+    val speed = live.values.sumOf { it.bytesPerSecond }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colors.primary.copy(alpha = 0.12f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Downloading, contentDescription = null, tint = MaterialTheme.colors.primary)
+        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+            Text(stringResource(R.string.downloads_active_open, index.active.size), style = MaterialTheme.typography.subtitle1)
+            val running = live.values.firstOrNull()
+            if (running != null) {
+                Text(
+                    text = NotificationProgressCallback.describe(context, running.downloaded, running.total, speed),
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+    }
+}
+
+@Composable
+private fun ActiveView(index: OfflineIndex, actions: BrowseActions, selection: Set<Long>, modifier: Modifier) {
+    if (index.active.isEmpty()) {
+        DownloadsEmpty(modifier = modifier)
+        return
+    }
+    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+        items(index.active, key = { "active-" + it.download.id }) { files ->
+            DownloadItem(
+                downloadFiles = files,
+                onOpen = { actions.open(files.download) },
+                onDownload = { actions.retry(files.download) },
+                onToggleSelection = { actions.toggleSelection(files.download) },
+                isSelected = files.download.id in selection,
+                selectionMode = selection.isNotEmpty(),
             )
         }
     }
