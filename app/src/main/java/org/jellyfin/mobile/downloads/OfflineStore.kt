@@ -14,7 +14,8 @@ import java.util.UUID
 
 /**
  * Small state of the downloads kept beside the database: followed shows (new episodes are downloaded
- * for them, see [OfflineMaintenance]) and favorite marks set without the server, not sent yet.
+ * for them, see [OfflineMaintenance]), favorite marks set without the server, not sent yet, and how
+ * videos are downloaded ([DownloadOptions]).
  */
 class OfflineStore(context: Context) {
     private val prefs = context.getSharedPreferences("offline_state", Context.MODE_PRIVATE)
@@ -50,6 +51,19 @@ class OfflineStore(context: Context) {
         if (_favorites.value[itemId.toString()] == sent) writeFavorites(_favorites.value - itemId.toString())
     }
 
+    private val _options = MutableStateFlow(readOptions())
+
+    /** How each video not downloaded as the original file is made, by item id (see [DownloadOptions]). */
+    fun optionsOf(itemId: UUID): DownloadOptions = _options.value[itemId.toString()] ?: DownloadOptions()
+
+    @Synchronized
+    fun setOptions(itemId: UUID, options: DownloadOptions) {
+        val updated = if (options.isOriginal) _options.value - itemId.toString() else _options.value + (itemId.toString() to options)
+        if (updated == _options.value) return
+        prefs.edit { putString(KEY_OPTIONS, json.encodeToString(optionsSerializer, updated)) }
+        _options.value = updated
+    }
+
     /** What was last offered with "ask first", so the same offer does not come back on every start. */
     var lastOffer: String?
         get() = prefs.getString(KEY_LAST_OFFER, null)
@@ -68,7 +82,13 @@ class OfflineStore(context: Context) {
         prefs.getString(KEY_FAVORITES, null)?.let { json.decodeFromString(MapSerializer(String.serializer(), Boolean.serializer()), it) }
     }.getOrNull().orEmpty()
 
+    private fun readOptions(): Map<String, DownloadOptions> = runCatching {
+        prefs.getString(KEY_OPTIONS, null)?.let { json.decodeFromString(optionsSerializer, it) }
+    }.getOrNull().orEmpty()
+
     companion object {
+        private const val KEY_OPTIONS = "download_options"
+        private val optionsSerializer = MapSerializer(String.serializer(), DownloadOptions.serializer())
         private const val KEY_FOLLOWS = "follows"
         private const val KEY_FAVORITES = "favorites"
         private const val KEY_LAST_OFFER = "last_offer"

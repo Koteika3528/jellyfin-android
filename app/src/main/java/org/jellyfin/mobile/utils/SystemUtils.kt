@@ -22,6 +22,13 @@ import org.jellyfin.mobile.MainActivity
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.app.AppPreferences
 import org.jellyfin.mobile.downloads.DownloadManager
+import org.jellyfin.mobile.downloads.DownloadOptionsFragment
+import org.jellyfin.mobile.utils.extensions.addFragment
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.model.api.MediaType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jellyfin.mobile.settings.ExternalPlayerPackage
 import org.jellyfin.mobile.ui.utils.shouldShowDownloadSettingsDialog
 import org.jellyfin.mobile.ui.utils.showDownloadSettingsDialog
@@ -81,12 +88,27 @@ suspend fun MainActivity.requestDownload(itemIds: Collection<UUID>) {
         }
     }
 
+    // Videos: which episodes and how (original, remux, transcode) on a screen of their own
+    val api: ApiClient = get()
+    val hasVideo = runCatching {
+        withContext(Dispatchers.IO) { api.itemsApi.getItems(ids = itemIds.take(VIDEO_CHECK_ITEMS)).content.items }
+    }.getOrNull().orEmpty().any { it.mediaType == MediaType.VIDEO }
+    if (hasVideo) {
+        if (!supportFragmentManager.isStateSaved) {
+            supportFragmentManager.addFragment<DownloadOptionsFragment>(DownloadOptionsFragment.arguments(itemIds))
+        }
+        return
+    }
+
     // Add actual download
     val server = mainViewModel.serverState.value.server ?: return
     val user = mainViewModel.userState.value.user ?: return
 
     downloadManager.enqueueItems(server, user, itemIds)
 }
+
+/** Enough to tell whether a download is videos (episodes, movies) or music. */
+private const val VIDEO_CHECK_ITEMS = 5
 
 fun Activity.isAutoRotateOn() = Settings.System.getInt(contentResolver, ACCELEROMETER_ROTATION, 0) == 1
 

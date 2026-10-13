@@ -23,6 +23,7 @@ import org.jellyfin.sdk.model.api.ImageType
 import timber.log.Timber
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class DownloadQueue(
     private val context: Context,
@@ -32,20 +33,28 @@ class DownloadQueue(
     private val storageManager: StorageManager,
     private val offlineLibrary: OfflineLibrary,
     okHttpClient: OkHttpClient,
+    private val offlineStore: OfflineStore,
 ) {
     /**
      * @param shared the file is shared by several downloads (album cover, series and season posters):
      * an existing copy is kept instead of being downloaded again.
      * @param optional a failure (e.g. a missing image) does not fail the whole download.
+     * @param streamed made by the server while downloading (remux, transcode): starts over after a
+     * broken connection, its size is only [estimatedSize].
      */
     private data class QueuedFile(
         val file: DownloadFileEntity,
         val remoteUri: Uri,
         val shared: Boolean = false,
         val optional: Boolean = false,
+        val streamed: Boolean = false,
+        val estimatedSize: Long? = null,
     )
 
     private val _downloader = FileDownloader(okHttpClient)
+
+    // The server may think a while between pieces when it encodes
+    private val _streamDownloader = FileDownloader(okHttpClient.newBuilder().readTimeout(STREAM_READ_TIMEOUT_MINUTES, TimeUnit.MINUTES).build())
     private val _downloads = mutableListOf<DownloadFiles>()
 
     suspend fun prepare(): Boolean {
@@ -118,6 +127,12 @@ class DownloadQueue(
             DownloadProgressTracker.remove(current.id)
             downloadDao.update(current.copy(status = DownloadStatus.QUEUED))
             throw e
+        } catch (e: DownloadRefusedException) {
+            // Only this download fails, the queue goes on
+            Timber.e(e, "Download ${current.id} failed")
+            DownloadProgressTracker.remove(current.id)
+            downloadDao.update(current.copy(status = DownloadStatus.ERROR))
+            downloadNotificationManager.hideProgress()
         } catch (e: Exception) {
             DownloadProgressTracker.remove(current.id)
             downloadDao.update(current.copy(status = DownloadStatus.ERROR))
@@ -153,11 +168,13 @@ class DownloadQueue(
         downloadDao.updateFile(file.copy(status = DownloadStatus.DOWNLOADING))
 
         try {
-            _downloader.downloadAndSave(
+            (if (queuedFile.streamed) _streamDownloader else _downloader).downloadAndSave(
                 api = api,
                 from = remoteUri,
                 to = fileDescriptor,
                 progressCallback = progressCallback,
+                resumable = !queuedFile.streamed,
+                estimatedSize = queuedFile.estimatedSize,
             )
 
             // Update file record with final size and status
@@ -183,13 +200,14 @@ class DownloadQueue(
 
         // Files that are already there stay where they are; everything else follows the library layout
         val keepFolder = files.any { it.status == DownloadStatus.DOWNLOADED }
+        val options = offlineStore.optionsOf(item.id)
         val directory = if (keepFolder) download.path else layout.directory
         val updated = if (directory != download.path) download.copy(path = directory).also { downloadDao.update(it) } else download
         val prepared = downloadWithFiles.copy(download = updated)
         val fileName = if (keepFolder) {
-            files.firstOrNull { it.type == DownloadFileType.ITEM }?.fileName?.substringAfterLast('/') ?: layout.fileName
+            files.firstOrNull { it.type == DownloadFileType.ITEM }?.fileName?.substringAfterLast('/') ?: options.fileName(layout.fileName)
         } else {
-            layout.fileName
+            options.fileName(layout.fileName)
         }
         val placed = layout.copy(directory = directory, fileName = fileName)
 
@@ -198,7 +216,7 @@ class DownloadQueue(
             preparePrimaryImageFile(api, prepared, placed)?.let(::add)
 
             // Add main item second as it is (often) the largest and important file
-            add(prepareMainFile(api, prepared, placed))
+            add(prepareMainFile(api, prepared, placed, options))
 
             if (item.type == BaseItemKind.EPISODE) addAll(prepareSeriesFiles(api, prepared, placed))
             if (item.type == BaseItemKind.AUDIO) registerAlbum(api, item, placed)
@@ -209,15 +227,21 @@ class DownloadQueue(
         api: ApiClient,
         downloadWithFiles: DownloadFiles,
         layout: OfflineLayout,
-    ) = QueuedFile(
-        file = createOrUpdateFile(
-            filter = { it.type == DownloadFileType.ITEM },
-            downloadWithFiles = downloadWithFiles,
-            type = DownloadFileType.ITEM,
-            path = layout.filePath,
-        ),
-        remoteUri = api.libraryApi.getDownloadUrl(downloadWithFiles.download.item.id).toUri(),
-    )
+        options: DownloadOptions,
+    ): QueuedFile {
+        val itemId = downloadWithFiles.download.item.id
+        return QueuedFile(
+            file = createOrUpdateFile(
+                filter = { it.type == DownloadFileType.ITEM },
+                downloadWithFiles = downloadWithFiles,
+                type = DownloadFileType.ITEM,
+                path = layout.filePath,
+            ),
+            remoteUri = if (options.isOriginal) api.libraryApi.getDownloadUrl(itemId).toUri() else options.remoteUri(api, itemId),
+            streamed = !options.isOriginal,
+            estimatedSize = options.estimatedSize,
+        )
+    }
 
     /** The episode thumbnail, the movie poster, or the album cover shared by its tracks. */
     private suspend fun preparePrimaryImageFile(
@@ -350,3 +374,5 @@ class DownloadQueue(
         }
     }
 }
+
+private const val STREAM_READ_TIMEOUT_MINUTES = 5L

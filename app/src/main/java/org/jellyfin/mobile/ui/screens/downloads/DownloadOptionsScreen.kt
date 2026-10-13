@@ -1,0 +1,369 @@
+package org.jellyfin.mobile.ui.screens.downloads
+
+import android.text.format.Formatter
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.Button
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Divider
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.RadioButton
+import androidx.compose.material.Scaffold
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.TopAppBar
+import androidx.compose.material.TriStateCheckbox
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import org.jellyfin.mobile.R
+import org.jellyfin.mobile.downloads.DownloadMode
+import org.jellyfin.mobile.downloads.DownloadOptions
+import org.jellyfin.mobile.downloads.DownloadOptionsViewModel
+import org.jellyfin.mobile.downloads.DownloadOptionsViewModel.Quality
+import java.util.Locale
+
+/** Which episodes and how to download them, opened when the web client asks to download videos. */
+@Composable
+fun DownloadOptionsScreen(
+    viewModel: DownloadOptionsViewModel,
+    onBack: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val context = LocalContext.current
+    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize().systemBarsPadding(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = viewModel.title ?: stringResource(R.string.download_options_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+                    }
+                },
+            )
+        },
+        bottomBar = {
+            if (!viewModel.loading && viewModel.error == null) {
+                Surface(elevation = 8.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.download_options_count, viewModel.selected.size),
+                                style = MaterialTheme.typography.body2,
+                            )
+                            viewModel.availableBytes?.let { free ->
+                                Text(
+                                    text = stringResource(R.string.download_options_free, size(free)),
+                                    style = MaterialTheme.typography.caption,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                                )
+                            }
+                        }
+                        val estimate = viewModel.estimatedSize()
+                        Button(onClick = onStart, enabled = viewModel.selected.isNotEmpty()) {
+                            Text(
+                                if (estimate != null) {
+                                    stringResource(R.string.download_options_start_size, size(estimate))
+                                } else {
+                                    stringResource(R.string.download_options_start)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    ) { padding ->
+        when {
+            viewModel.loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            viewModel.error != null -> Box(Modifier.fillMaxSize().padding(padding).padding(16.dp), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.download_options_error, viewModel.error.orEmpty()))
+            }
+            else -> OptionsList(viewModel, Modifier.padding(padding), ::size)
+        }
+    }
+}
+
+@Composable
+private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier, size: (Long) -> String) {
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        if (viewModel.canChoose) {
+            item(key = "what") {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                    Header(stringResource(R.string.download_options_what), Modifier.weight(1f))
+                    TextButton(onClick = viewModel::selectUnwatched) { Text(stringResource(R.string.download_options_unwatched)) }
+                    TextButton(onClick = viewModel::selectAll) { Text(stringResource(R.string.download_options_all)) }
+                }
+            }
+            for (season in viewModel.seasons) {
+                val chosen = season.items.count { it.id in viewModel.selected }
+                val open = season.key in viewModel.expanded
+                // Movies without seasons are listed as they are
+                if (viewModel.seasons.size > 1 || season.title != null) {
+                    item(key = "season-${season.key}") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleExpanded(season) }.padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TriStateCheckbox(
+                                state = when (chosen) {
+                                    0 -> ToggleableState.Off
+                                    season.items.size -> ToggleableState.On
+                                    else -> ToggleableState.Indeterminate
+                                },
+                                onClick = { viewModel.toggle(season) },
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(seasonTitle(season.title), style = MaterialTheme.typography.subtitle1)
+                                val bytes = season.items.filter { it.id in viewModel.selected }.sumOf { viewModel.sizeOf(it) ?: 0L }
+                                Text(
+                                    text = stringResource(R.string.download_options_season_count, chosen, season.items.size) +
+                                        if (bytes > 0) " · " + size(bytes) else "",
+                                    style = MaterialTheme.typography.caption,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                                )
+                            }
+                            Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                        }
+                    }
+                }
+                if (open || (viewModel.seasons.size == 1 && season.title == null)) {
+                    items(season.items, key = { "item-${it.id}" }) { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.toggle(item) }.padding(start = 24.dp, end = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = item.id in viewModel.selected, onCheckedChange = { viewModel.toggle(item) })
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = listOfNotNull(item.indexNumber?.toString(), item.name).joinToString(". "),
+                                    style = MaterialTheme.typography.body1,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                val details = listOfNotNull(
+                                    viewModel.sizeOf(item)?.let(size),
+                                    stringResource(R.string.download_options_watched).takeIf { item.userData?.played == true },
+                                )
+                                if (details.isNotEmpty()) {
+                                    Text(
+                                        text = details.joinToString(" · "),
+                                        style = MaterialTheme.typography.caption,
+                                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item { Divider(modifier = Modifier.padding(top = 8.dp)) }
+        }
+
+        item(key = "how") { Header(stringResource(R.string.download_options_how)) }
+        item(key = "modes") {
+            Column {
+                ModeRow(viewModel, DownloadMode.ORIGINAL, R.string.download_mode_original, R.string.download_mode_original_description, size)
+                ModeRow(viewModel, DownloadMode.REMUX, R.string.download_mode_remux, R.string.download_mode_remux_description, size)
+                ModeRow(viewModel, DownloadMode.TRANSCODE, R.string.download_mode_transcode, R.string.download_mode_transcode_description, size)
+                if (!viewModel.canConvert) {
+                    Text(
+                        text = stringResource(R.string.download_mode_unavailable),
+                        style = MaterialTheme.typography.caption,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+            }
+        }
+
+        if (viewModel.mode != DownloadMode.ORIGINAL) {
+            val total = viewModel.selectedItems.size
+            val audio = viewModel.audioTracks
+            if (audio.isNotEmpty()) {
+                item(key = "audio") { Header(stringResource(R.string.download_options_audio)) }
+                items(audio, key = { "audio-${it.key}" }) { track ->
+                    TrackRow(track, total, checked = track.key !in viewModel.excludedAudio) { viewModel.toggleAudio(track) }
+                }
+                if (audio.all { it.key in viewModel.excludedAudio }) {
+                    item { Hint(stringResource(R.string.download_options_no_audio)) }
+                }
+            }
+            val subtitles = viewModel.subtitleTracks
+            if (subtitles.isNotEmpty()) {
+                item(key = "subtitles") { Header(stringResource(R.string.download_options_subtitles)) }
+                items(subtitles, key = { "subtitle-${it.key}" }) { track ->
+                    TrackRow(track, total, checked = track.key !in viewModel.excludedSubtitles) { viewModel.toggleSubtitle(track) }
+                }
+            }
+        }
+
+        if (viewModel.mode == DownloadMode.TRANSCODE) {
+            item(key = "video") { Header(stringResource(R.string.download_options_video)) }
+            item(key = "codecs") {
+                Column {
+                    Choice(viewModel.videoCodec == DownloadOptions.H264, stringResource(R.string.download_codec_h264), stringResource(R.string.download_codec_h264_description)) {
+                        viewModel.videoCodec = DownloadOptions.H264
+                    }
+                    Choice(viewModel.videoCodec == DownloadOptions.HEVC, stringResource(R.string.download_codec_hevc), stringResource(R.string.download_codec_hevc_description)) {
+                        viewModel.videoCodec = DownloadOptions.HEVC
+                    }
+                }
+            }
+            item(key = "quality") { Header(stringResource(R.string.download_options_quality)) }
+            items(Quality.entries, key = { "quality-${it.name}" }) { quality ->
+                val megabits = String.format(Locale.getDefault(), "%.1f", quality.bitrate / 1_000_000f).removeSuffix("0").removeSuffix(".").removeSuffix(",")
+                Choice(viewModel.quality == quality, stringResource(R.string.download_quality, quality.maxHeight, megabits), null) {
+                    viewModel.quality = quality
+                }
+            }
+            item(key = "sound") { Header(stringResource(R.string.download_options_sound)) }
+            item(key = "sound-codecs") {
+                Column {
+                    Choice(viewModel.audioCodec == DownloadOptions.AAC, stringResource(R.string.download_audio_aac), null) {
+                        viewModel.audioCodec = DownloadOptions.AAC
+                    }
+                    Choice(viewModel.audioCodec == DownloadOptions.OPUS, stringResource(R.string.download_audio_opus), stringResource(R.string.download_audio_opus_description)) {
+                        viewModel.audioCodec = DownloadOptions.OPUS
+                    }
+                    Choice(viewModel.audioCodec == DownloadOptions.COPY, stringResource(R.string.download_audio_copy), null) {
+                        viewModel.audioCodec = DownloadOptions.COPY
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.padding(bottom = 16.dp)) }
+    }
+}
+
+@Composable
+private fun seasonTitle(title: String?): String = when {
+    title == null -> stringResource(R.string.download_options_videos)
+    title.toIntOrNull() != null -> stringResource(R.string.download_options_season, title)
+    else -> title
+}
+
+@Composable
+private fun ModeRow(viewModel: DownloadOptionsViewModel, mode: DownloadMode, title: Int, description: Int, size: (Long) -> String) {
+    val enabled = mode == DownloadMode.ORIGINAL || viewModel.canConvert
+    val estimate = if (enabled) viewModel.estimatedSize(mode) else null
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { viewModel.mode = mode }
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = viewModel.mode == mode, onClick = { viewModel.mode = mode }, enabled = enabled)
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(title), style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Medium)
+                if (estimate != null) {
+                    Text(
+                        text = (if (mode == DownloadMode.ORIGINAL) "" else "≈ ") + size(estimate),
+                        style = MaterialTheme.typography.body2,
+                    )
+                }
+            }
+            Text(
+                text = stringResource(description),
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = if (enabled) 0.7f else 0.4f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackRow(track: DownloadOptionsViewModel.Track, total: Int, checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 4.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = { onToggle() })
+        Text(track.label, style = MaterialTheme.typography.body1, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // Not in every episode: these keep their default track instead
+        if (total > 1 && track.count < total) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.download_options_in_count, track.count, total),
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Choice(selected: Boolean, title: String, description: String?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.body1)
+            if (description != null) {
+                Text(description, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Header(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.subtitle1,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption,
+        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+}

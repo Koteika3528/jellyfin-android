@@ -16,6 +16,7 @@ import org.jellyfin.mobile.data.entity.UserEntity
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.MediaSourceInfo
 import timber.log.Timber
 import java.util.UUID
 
@@ -27,6 +28,7 @@ class DownloadManager(
     private val storageManager: StorageManager,
     private val offlineLibrary: OfflineLibrary,
     private val downloadNotificationManager: DownloadNotificationManager,
+    private val offlineStore: OfflineStore,
 ) {
     companion object {
         /**
@@ -42,10 +44,15 @@ class DownloadManager(
         private val ITEM_FIELDS = setOf(ItemFields.MEDIA_SOURCES, ItemFields.PATH, ItemFields.GENRES, ItemFields.OVERVIEW)
     }
 
+    /**
+     * @param options how videos are downloaded (chosen on the download screen); items without keep
+     * how they were downloaded before, new ones are downloaded as the original file.
+     */
     suspend fun enqueueItems(
         server: ServerEntity,
         user: UserEntity,
         items: Collection<UUID>,
+        options: Map<UUID, DownloadOptions> = emptyMap(),
     ) = withContext(Dispatchers.IO) {
         for (itemsChunk in items.chunked(ITEMS_BATCH)) {
             val existingItems = downloadDao.getDownloadsByItemIds(itemsChunk)
@@ -64,8 +71,15 @@ class DownloadManager(
                 )
             }
 
-            for (item in response.items) {
-                var downloadEntity = existingItems[item.id]
+            for (fetched in response.items) {
+                var downloadEntity = existingItems[fetched.id]
+                val previous = offlineStore.optionsOf(fetched.id)
+                val itemOptions = options[fetched.id] ?: previous
+                // The stored item describes the file that is downloaded: only its tracks, numbered as in it
+                val item = fetched.copy(mediaSources = downloadedSources(fetched.mediaSources, itemOptions))
+                // Another way of downloading: the old file goes, the next one is made anew
+                if (downloadEntity != null && itemOptions != previous) removeMainFile(downloadEntity.id)
+                offlineStore.setOptions(fetched.id, itemOptions)
                 if (downloadEntity != null) {
                     // If the item already exists we just update the local information for it and requeue it
                     // this will force the download worker to recheck the local file in case it is missing or changed
@@ -94,6 +108,18 @@ class DownloadManager(
         }
 
         warnAboutSpace()
+    }
+
+    private fun downloadedSources(sources: List<MediaSourceInfo>?, options: DownloadOptions): List<MediaSourceInfo>? {
+        if (options.isOriginal || sources.isNullOrEmpty()) return sources
+        val source = sources.firstOrNull { it.id == options.mediaSourceId } ?: sources.first()
+        return listOf(options.rewrite(source))
+    }
+
+    private suspend fun removeMainFile(downloadId: Long) {
+        val main = downloadDao.getFiles(downloadId).firstOrNull { it.type == DownloadFileType.ITEM } ?: return
+        runCatching { DocumentFile.fromSingleUri(context, main.uri)?.delete() }
+        downloadDao.deleteFile(main.id)
     }
 
     /** "Warn when the device runs out of space": little free space, or the space set aside is used up. */
@@ -134,7 +160,9 @@ class DownloadManager(
             val byId = items.associateBy { it.id }
             for (download in chunk) {
                 val fresh = byId[download.itemId] ?: continue
-                downloadDao.update(download.copy(item = fresh.copy(genres = fresh.genres ?: emptyList())))
+                // A remuxed or transcoded file keeps the description of its own tracks
+                val sources = if (offlineStore.optionsOf(download.itemId).isOriginal) fresh.mediaSources else download.item.mediaSources
+                downloadDao.update(download.copy(item = fresh.copy(genres = fresh.genres ?: emptyList(), mediaSources = sources)))
             }
         }
     }
@@ -215,6 +243,7 @@ class DownloadManager(
         val removable = if (deleteFiles) files.filter { file -> downloadDao.countOtherFilesWithUri(file.uri, id) == 0 } else emptyList()
 
         downloadDao.delete(id)
+        offlineStore.setOptions(download.itemId, DownloadOptions())
 
         if (download.status == DownloadStatus.DOWNLOADING) {
             DownloadWorker.restart(context, appPreferences)

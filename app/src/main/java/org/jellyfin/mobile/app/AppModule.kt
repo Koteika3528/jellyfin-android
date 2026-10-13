@@ -31,6 +31,7 @@ import org.jellyfin.mobile.bridge.MediaSegments
 import org.jellyfin.mobile.bridge.NativePlayer
 import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadNotificationManager
+import org.jellyfin.mobile.downloads.DownloadOptionsViewModel
 import org.jellyfin.mobile.downloads.DownloadQueue
 import org.jellyfin.mobile.downloads.OfflineLibrary
 import org.jellyfin.mobile.downloads.OfflineMaintenance
@@ -89,6 +90,7 @@ val applicationModule = module {
     // ViewModels
     viewModel { MainViewModel(get(), get()) }
     viewModel { DownloadsViewModel() }
+    viewModel { DownloadOptionsViewModel() }
 
     // Fragments
     fragment { WebViewFragment() }
@@ -186,9 +188,9 @@ val applicationModule = module {
     }
 
     single(createdAtStart = true) { StorageManager(get(), get()) }
-    single { DownloadManager(get(), get(), get(), get(), get(), get(), get()) }
+    single { DownloadManager(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { DownloadNotificationManager(get()) }
-    single { DownloadQueue(get(), get(), get(), get(), get(), get(), get()) }
+    single { DownloadQueue(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { OfflineLibrary(get(), get(), get(), get(), get(), get(), get()) }
     single { OfflineStore(androidApplication()) }
     single { OfflinePlayback(get(), get(), get(), get()) }

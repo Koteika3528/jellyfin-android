@@ -2,6 +2,7 @@ package org.jellyfin.mobile.downloads
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.system.Os
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -52,6 +53,14 @@ class FileDownloader(
         // 416 (Requested Range Not Satisfiable) can happen when we've already fully downloaded the file
         if (response.code == 416 && rangeStart != null && rangeStart >= response.getContentRange().total) return response
 
+        // The server refuses (no permission, the file cannot be made): trying again does not help
+        val refused = response.code in 400..499 && response.code !in TRANSIENT_CODES
+        if (refused || (rangeStart == null && response.code >= 500)) {
+            val message = response.body?.string()?.take(MAX_ERROR_LENGTH).orEmpty()
+            response.close()
+            throw DownloadRefusedException("Server refused the download (${response.code}): $message")
+        }
+
         // Throw for other unsuccessful responses
         if (!response.isSuccessful) throw IOException("Unexpected response $response")
 
@@ -79,7 +88,8 @@ class FileDownloader(
     }
 
     private fun Response.getContentRange() = when (code) {
-        200 -> requireNotNull(header("Content-Length")).let(ContentRange::fromContentLengthHeader)
+        // A file made while downloading has no length
+        200 -> header("Content-Length")?.let(ContentRange::fromContentLengthHeader) ?: ContentRange(0, -1, -1)
         206, 416 -> requireNotNull(header("Content-Range")).let(ContentRange::fromContentRangeHeader)
         else -> error("Invalid response code $code")
     }
@@ -88,8 +98,11 @@ class FileDownloader(
         response: Response,
         to: ParcelFileDescriptor,
         progressCallback: ProgressCallback,
+        estimatedSize: Long?,
     ) = withContext(Dispatchers.IO) {
         val contentRange = response.getContentRange()
+        // Unknown length: the estimate, never below what already came
+        fun total(read: Long) = if (contentRange.total > 0) contentRange.total else estimatedSize?.coerceAtLeast(read) ?: -1L
 
         val output = ParcelFileDescriptor.AutoCloseOutputStream(to)
         output.channel.position(contentRange.start)
@@ -106,7 +119,7 @@ class FileDownloader(
                     outputFile.write(buffer, 0, bytesRead)
                     totalRead += bytesRead
 
-                    progressCallback.onProgress(totalRead, contentRange.total)
+                    progressCallback.onProgress(totalRead, total(totalRead))
                 }
             }
         }
@@ -117,9 +130,21 @@ class FileDownloader(
         from: Uri,
         to: ParcelFileDescriptor,
         progressCallback: ProgressCallback = ProgressCallback.Empty,
+        resumable: Boolean = true,
+        estimatedSize: Long? = null,
     ) {
-        val rangeStart = to.statSize
+        // What cannot be continued starts over
+        if (!resumable) Os.ftruncate(to.fileDescriptor, 0)
+        val rangeStart = if (resumable) to.statSize else null
         val response = download(api, from, rangeStart)
-        save(response, to, progressCallback)
+        save(response, to, progressCallback, estimatedSize)
     }
 }
+
+/** The server answered, but will not give the file: the download fails instead of trying again. */
+class DownloadRefusedException(message: String) : Exception(message)
+
+private const val MAX_ERROR_LENGTH = 500
+
+/** Request timeout, range not satisfiable (handled as before), too many requests. */
+private val TRANSIENT_CODES = setOf(408, 416, 429)
