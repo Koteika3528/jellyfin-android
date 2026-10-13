@@ -313,15 +313,11 @@
     <string name="download_mode_unavailable">Remux and transcode are for video files only</string>
     <string name="download_options_audio">Voice-overs</string>
     <string name="download_options_subtitles">Subtitles</string>
-    <string name="download_options_in_count">in %1$d of %2$d</string>
-    <string name="download_options_no_audio">Nothing checked: every episode keeps its default track</string>
     <string name="download_options_video">Video codec</string>
     <string name="download_codec_h264">H.264</string>
     <string name="download_codec_h264_description">Plays on any device</string>
     <string name="download_codec_hevc">HEVC (H.265)</string>
     <string name="download_codec_hevc_description">Smaller at the same quality, slower to encode</string>
-    <string name="download_options_quality">Quality</string>
-    <string name="download_quality">%1$dp · %2$s Mbit/s</string>
     <string name="download_options_sound">Sound</string>
     <string name="download_audio_aac">AAC, stereo</string>
     <string name="download_audio_opus">Opus, stereo</string>
@@ -332,4 +328,16 @@
     <string name="download_options_start">Download</string>
     <string name="download_options_start_size">Download · %1$s</string>
     <string name="download_options_error">Could not load the items: %1$s</string>
+    <string name="download_options_no_audio">Episodes without a checked voice-over keep their default track</string>
+    <string name="download_options_track_count">%1$d/%2$d</string>
+    <string name="download_options_resolution">Resolution</string>
+    <string name="download_resolution_source">Source</string>
+    <string name="download_options_bitrate">Bitrate</string>
+    <string name="download_bitrate_auto">Auto, up to %1$s Mbit/s</string>
+    <string name="download_bitrate_auto_description">As much as each episode needs for the quality of its source, not more than the limit for this codec and resolution</string>
+    <string name="download_bitrate_manual">My limit</string>
+    <string name="download_bitrate_manual_description">Each episode gets what it needs, at most this</string>
+    <string name="download_bitrate_field">Limit, Mbit/s</string>
+    <string name="download_bitrate_average">On average for the chosen episodes: ≈ %1$s Mbit/s</string>
+    <string name="download_options_insecure">The server address is http: the download is not encrypted and the provider can see and slow it down. An https address of the server helps.</string>
 </resources>

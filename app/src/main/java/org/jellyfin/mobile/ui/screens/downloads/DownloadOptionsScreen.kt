@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CircularProgressIndicator
@@ -21,6 +22,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
@@ -39,13 +41,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.downloads.DownloadMode
 import org.jellyfin.mobile.downloads.DownloadOptions
 import org.jellyfin.mobile.downloads.DownloadOptionsViewModel
-import org.jellyfin.mobile.downloads.DownloadOptionsViewModel.Quality
+import org.jellyfin.mobile.downloads.DownloadOptionsViewModel.Resolution
 import java.util.Locale
 
 /** Which episodes and how to download them, opened when the web client asks to download videos. */
@@ -126,6 +129,16 @@ fun DownloadOptionsScreen(
 @Composable
 private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier, size: (Long) -> String) {
     LazyColumn(modifier = modifier.fillMaxSize()) {
+        if (viewModel.insecureConnection) {
+            item(key = "insecure") {
+                Text(
+                    text = stringResource(R.string.download_options_insecure),
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.error,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                )
+            }
+        }
         if (viewModel.canChoose) {
             item(key = "what") {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
@@ -216,22 +229,30 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
         }
 
         if (viewModel.mode != DownloadMode.ORIGINAL) {
-            val total = viewModel.selectedItems.size
-            val audio = viewModel.audioTracks
-            if (audio.isNotEmpty()) {
+            val groups = viewModel.trackGroups
+            // Several seasons: tracks are chosen for each of them, they differ often
+            val bySeason = groups.size > 1
+            if (groups.any { it.audio.isNotEmpty() }) {
                 item(key = "audio") { Header(stringResource(R.string.download_options_audio)) }
-                items(audio, key = { "audio-${it.key}" }) { track ->
-                    TrackRow(track, total, checked = track.key !in viewModel.excludedAudio) { viewModel.toggleAudio(track) }
-                }
-                if (audio.all { it.key in viewModel.excludedAudio }) {
-                    item { Hint(stringResource(R.string.download_options_no_audio)) }
+                for (group in groups) {
+                    if (group.audio.isEmpty()) continue
+                    if (bySeason) item(key = "audio-season-${group.season.key}") { SubHeader(seasonTitle(group.season.title)) }
+                    items(group.audio, key = { "audio-${group.season.key}-${it.key}" }) { track ->
+                        TrackRow(track, checked = viewModel.isAudioKept(group.season, track)) { viewModel.toggleAudio(group.season, track) }
+                    }
+                    if (group.audio.none { viewModel.isAudioKept(group.season, it) } || group.audio.any { it.count < it.total }) {
+                        item(key = "audio-hint-${group.season.key}") { Hint(stringResource(R.string.download_options_no_audio)) }
+                    }
                 }
             }
-            val subtitles = viewModel.subtitleTracks
-            if (subtitles.isNotEmpty()) {
+            if (groups.any { it.subtitles.isNotEmpty() }) {
                 item(key = "subtitles") { Header(stringResource(R.string.download_options_subtitles)) }
-                items(subtitles, key = { "subtitle-${it.key}" }) { track ->
-                    TrackRow(track, total, checked = track.key !in viewModel.excludedSubtitles) { viewModel.toggleSubtitle(track) }
+                for (group in groups) {
+                    if (group.subtitles.isEmpty()) continue
+                    if (bySeason) item(key = "subtitle-season-${group.season.key}") { SubHeader(seasonTitle(group.season.title)) }
+                    items(group.subtitles, key = { "subtitle-${group.season.key}-${it.key}" }) { track ->
+                        TrackRow(track, checked = viewModel.isSubtitleKept(group.season, track)) { viewModel.toggleSubtitle(group.season, track) }
+                    }
                 }
             }
         }
@@ -248,11 +269,50 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
                     }
                 }
             }
-            item(key = "quality") { Header(stringResource(R.string.download_options_quality)) }
-            items(Quality.entries, key = { "quality-${it.name}" }) { quality ->
-                val megabits = String.format(Locale.getDefault(), "%.1f", quality.bitrate / 1_000_000f).removeSuffix("0").removeSuffix(".").removeSuffix(",")
-                Choice(viewModel.quality == quality, stringResource(R.string.download_quality, quality.maxHeight, megabits), null) {
-                    viewModel.quality = quality
+            item(key = "resolution") { Header(stringResource(R.string.download_options_resolution)) }
+            item(key = "resolutions") {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    for (resolution in Resolution.entries) {
+                        Row(
+                            modifier = Modifier.clickable { viewModel.resolution = resolution },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = viewModel.resolution == resolution, onClick = { viewModel.resolution = resolution })
+                            Text(
+                                text = resolution.height?.let { "${it}p" } ?: stringResource(R.string.download_resolution_source),
+                                style = MaterialTheme.typography.body2,
+                            )
+                        }
+                    }
+                }
+            }
+            item(key = "bitrate") { Header(stringResource(R.string.download_options_bitrate)) }
+            item(key = "bitrate-modes") {
+                Column {
+                    Choice(
+                        selected = !viewModel.manualBitrate,
+                        title = stringResource(R.string.download_bitrate_auto, megabits(viewModel.recommendedLimit)),
+                        description = stringResource(R.string.download_bitrate_auto_description),
+                    ) { viewModel.manualBitrate = false }
+                    Choice(
+                        selected = viewModel.manualBitrate,
+                        title = stringResource(R.string.download_bitrate_manual),
+                        description = stringResource(R.string.download_bitrate_manual_description),
+                    ) { viewModel.manualBitrate = true }
+                    if (viewModel.manualBitrate) {
+                        OutlinedTextField(
+                            value = viewModel.manualMbits,
+                            onValueChange = { value -> viewModel.manualMbits = value.filter { it.isDigit() || it == '.' || it == ',' }.take(MAX_BITRATE_DIGITS) },
+                            label = { Text(stringResource(R.string.download_bitrate_field)) },
+                            singleLine = true,
+                            isError = viewModel.manualMbits.isNotEmpty() && viewModel.manualLimit == null,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        )
+                    }
+                    viewModel.averageBitrate?.let { average ->
+                        Hint(stringResource(R.string.download_bitrate_average, megabits(average)))
+                    }
                 }
             }
             item(key = "sound") { Header(stringResource(R.string.download_options_sound)) }
@@ -313,20 +373,20 @@ private fun ModeRow(viewModel: DownloadOptionsViewModel, mode: DownloadMode, tit
 }
 
 @Composable
-private fun TrackRow(track: DownloadOptionsViewModel.Track, total: Int, checked: Boolean, onToggle: () -> Unit) {
+private fun TrackRow(track: DownloadOptionsViewModel.Track, checked: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 4.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = { onToggle() })
         Text(track.label, style = MaterialTheme.typography.body1, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        // Not in every episode: these keep their default track instead
-        if (total > 1 && track.count < total) {
+        // Episodes with the track of the chosen ones: those without keep their default track
+        if (track.total > 1) {
             Spacer(Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.download_options_in_count, track.count, total),
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                text = stringResource(R.string.download_options_track_count, track.count, track.total),
+                style = MaterialTheme.typography.body2,
+                color = if (track.count < track.total) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
             )
         }
     }
@@ -357,6 +417,25 @@ private fun Header(text: String, modifier: Modifier = Modifier) {
         modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
     )
 }
+
+@Composable
+private fun SubHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.body2,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colors.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+    )
+}
+
+/** 3000000 → "3", 1500000 → "1.5" (in the device's format). */
+private fun megabits(bitsPerSecond: Int): String {
+    val value = bitsPerSecond.toDouble() / DownloadOptionsViewModel.MBIT
+    return if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.getDefault(), "%.1f", value)
+}
+
+private const val MAX_BITRATE_DIGITS = 5
 
 @Composable
 private fun Hint(text: String) {

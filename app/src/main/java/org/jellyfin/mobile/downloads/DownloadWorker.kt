@@ -1,6 +1,7 @@
 package org.jellyfin.mobile.downloads
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -15,6 +16,7 @@ import androidx.work.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 import org.jellyfin.mobile.app.AppPreferences
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -31,6 +33,8 @@ class DownloadWorker(
             val request = OneTimeWorkRequestBuilder<DownloadWorker>().apply {
                 addTag(tag)
                 setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                // Server unreachable: tried again in a minute, two, three... (not hours later)
+                setBackoffCriteria(BackoffPolicy.LINEAR, RETRY_DELAY_SECONDS, TimeUnit.SECONDS)
                 setConstraints(
                     Constraints.Builder().apply {
                         when (appPreferences.downloadMethod) {
@@ -96,3 +100,5 @@ class DownloadWorker(
         }
     }
 }
+
+private const val RETRY_DELAY_SECONDS = 60L

@@ -55,7 +55,9 @@ class FileDownloader(
 
         // The server refuses (no permission, the file cannot be made): trying again does not help
         val refused = response.code in 400..499 && response.code !in TRANSIENT_CODES
-        if (refused || (rangeStart == null && response.code >= 500)) {
+        // The server or its proxy is down for a moment (502-504): tried again later, as without a connection
+        val serverError = response.code >= 500 && response.code !in UNAVAILABLE_CODES
+        if (refused || (rangeStart == null && serverError)) {
             val message = response.body?.string()?.take(MAX_ERROR_LENGTH).orEmpty()
             response.close()
             throw DownloadRefusedException("Server refused the download (${response.code}): $message")
@@ -148,3 +150,6 @@ private const val MAX_ERROR_LENGTH = 500
 
 /** Request timeout, range not satisfiable (handled as before), too many requests. */
 private val TRANSIENT_CODES = setOf(408, 416, 429)
+
+/** Bad gateway, unavailable, gateway timeout. */
+private val UNAVAILABLE_CODES = setOf(502, 503, 504)

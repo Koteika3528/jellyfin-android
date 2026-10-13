@@ -151,8 +151,9 @@ class QueueManager(
             remoteFileUri = mainFile.uri,
         )
         startTime?.let { duration -> mediaSource.startTime = duration }
-        audioStreamIndex?.let { index -> mediaSource.selectAudioStream(mediaSource.audioStreams[index]) }
-        subtitleStreamIndex?.let { index -> mediaSource.selectSubtitleStream(mediaSource.subtitleStreams[index]) }
+        // By stream index (not position): a track the file does not have (-1 for subtitles off) selects none
+        audioStreamIndex?.let { index -> mediaSource.audioStreams.firstOrNull { it.index == index }?.let(mediaSource::selectAudioStream) }
+        subtitleStreamIndex?.let { index -> mediaSource.selectSubtitleStream(mediaSource.subtitleStreams.firstOrNull { it.index == index }) }
 
         _currentMediaSource.value = mediaSource
 

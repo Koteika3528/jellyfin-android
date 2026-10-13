@@ -303,15 +303,11 @@
     <string name="download_mode_unavailable">Перепаковка и перекодирование — только для видеофайлов</string>
     <string name="download_options_audio">Озвучки</string>
     <string name="download_options_subtitles">Субтитры</string>
-    <string name="download_options_in_count">в %1$d из %2$d</string>
-    <string name="download_options_no_audio">Ничего не выбрано: в каждой серии останется дорожка по умолчанию</string>
     <string name="download_options_video">Кодек видео</string>
     <string name="download_codec_h264">H.264</string>
     <string name="download_codec_h264_description">Играет на любом устройстве</string>
     <string name="download_codec_hevc">HEVC (H.265)</string>
     <string name="download_codec_hevc_description">Меньше при том же качестве, кодируется дольше</string>
-    <string name="download_options_quality">Качество</string>
-    <string name="download_quality">%1$dp · %2$s Мбит/с</string>
     <string name="download_options_sound">Звук</string>
     <string name="download_audio_aac">AAC, стерео</string>
     <string name="download_audio_opus">Opus, стерео</string>
@@ -322,4 +318,16 @@
     <string name="download_options_start">Скачать</string>
     <string name="download_options_start_size">Скачать · %1$s</string>
     <string name="download_options_error">Не удалось загрузить: %1$s</string>
+    <string name="download_options_no_audio">Серии без отмеченной озвучки получат дорожку по умолчанию</string>
+    <string name="download_options_track_count">%1$d/%2$d</string>
+    <string name="download_options_resolution">Разрешение</string>
+    <string name="download_resolution_source">Исходное</string>
+    <string name="download_options_bitrate">Битрейт</string>
+    <string name="download_bitrate_auto">Авто, до %1$s Мбит/с</string>
+    <string name="download_bitrate_auto_description">Каждой серии столько, сколько нужно под качество исходника, но не больше лимита для этого кодека и разрешения</string>
+    <string name="download_bitrate_manual">Свой лимит</string>
+    <string name="download_bitrate_manual_description">Каждой серии сколько нужно, но не больше указанного</string>
+    <string name="download_bitrate_field">Лимит, Мбит/с</string>
+    <string name="download_bitrate_average">В среднем по выбранным сериям: ≈ %1$s Мбит/с</string>
+    <string name="download_options_insecure">Адрес сервера — http: загрузка идёт без шифрования, провайдер видит её и может замедлять. Поможет https-адрес сервера.</string>
 </resources>

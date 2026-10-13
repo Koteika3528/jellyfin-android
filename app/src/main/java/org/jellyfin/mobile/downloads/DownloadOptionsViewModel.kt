@@ -3,6 +3,7 @@ package org.jellyfin.mobile.downloads
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import timber.log.Timber
 import java.util.UUID
+import kotlin.math.pow
 
 /**
  * The download screen of videos: which episodes (by season), and how: the original file, or a file
@@ -34,17 +36,20 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
     data class Season(val key: String, val title: String?, val items: List<BaseItemDto>)
 
     /**
-     * A voice-over or subtitle track as the same for all episodes: same language and name.
-     * @param count in how many of the chosen episodes it is.
+     * A voice-over or subtitle track, the same in all episodes of a season: same language and name.
+     * @param count in how many of the season's chosen episodes it is, of [total].
      */
-    data class Track(val key: String, val label: String, val count: Int)
+    data class Track(val key: String, val label: String, val count: Int, val total: Int)
 
-    enum class Quality(val maxHeight: Int, val bitrate: Int) {
-        P1080_HIGH(1080, 8_000_000),
-        P1080(1080, 4_000_000),
-        P720(720, 3_000_000),
-        P720_LOW(720, 1_500_000),
-        P480(480, 800_000),
+    /** The tracks of the chosen episodes of a season, chosen for the whole season. */
+    data class SeasonTracks(val season: Season, val audio: List<Track>, val subtitles: List<Track>)
+
+    enum class Resolution(val height: Int?) {
+        SOURCE(null),
+        P2160(2160),
+        P1080(1080),
+        P720(720),
+        P480(480),
     }
 
     var loading by mutableStateOf(true)
@@ -66,15 +71,22 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
 
     var mode by mutableStateOf(DownloadMode.ORIGINAL)
 
-    /** Tracks left out, by [Track.key]: tracks are kept unless unchecked, also ones of episodes chosen later. */
+    /**
+     * Tracks left out, by season and [Track.key] (see [trackId]): tracks are kept unless unchecked,
+     * also ones of episodes chosen later.
+     */
     var excludedAudio by mutableStateOf<Set<String>>(emptySet())
         private set
     var excludedSubtitles by mutableStateOf<Set<String>>(emptySet())
         private set
 
     var videoCodec by mutableStateOf(DownloadOptions.H264)
-    var quality by mutableStateOf(Quality.P720)
+    var resolution by mutableStateOf(Resolution.P720)
     var audioCodec by mutableStateOf(DownloadOptions.AAC)
+
+    /** The bitrate limit is typed in ([manualMbits]) instead of the recommended one. */
+    var manualBitrate by mutableStateOf(false)
+    var manualMbits by mutableStateOf("")
 
     private var items: List<BaseItemDto> = emptyList()
 
@@ -83,8 +95,18 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
     /** More than one item: the list to choose from is shown. */
     val canChoose: Boolean get() = items.size > 1
 
-    /** Only real files can be remuxed or transcoded by the server. */
-    val canConvert: Boolean get() = items.any { it.mediaType == MediaType.VIDEO && it.mediaSources?.firstOrNull() != null }
+    /** Only video files can be remuxed or transcoded by the server. */
+    val canConvert: Boolean get() = items.any { it.canConvert() }
+
+    /**
+     * Downloads go to the server without encryption over the internet: the provider sees the traffic
+     * and may slow it down (an https address of the server helps).
+     */
+    val insecureConnection: Boolean
+        get() {
+            val uri = api.baseUrl?.toUri() ?: return false
+            return uri.scheme == "http" && !isLocalHost(uri.host.orEmpty())
+        }
 
     fun load(itemIds: List<UUID>) {
         if (items.isNotEmpty() || itemIds.isEmpty()) return
@@ -96,7 +118,7 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
                     }
                 }
                 items = fetched.sortedWith(compareBy({ it.seriesName.orEmpty() }, { it.parentIndexNumber ?: Int.MAX_VALUE }, { it.indexNumber ?: Int.MAX_VALUE }))
-                seasons = items.groupBy { it.seasonId?.toString() ?: it.parentIndexNumber?.toString() ?: "" }.map { (key, list) ->
+                seasons = items.groupBy { seasonKey(it) }.map { (key, list) ->
                     val first = list.first()
                     Season(key, if (first.seriesName != null) first.seasonName ?: first.parentIndexNumber?.toString() else null, list)
                 }
@@ -136,48 +158,58 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         selected = items.map { it.id }.toSet()
     }
 
-    fun toggleAudio(track: Track) {
-        excludedAudio = if (track.key in excludedAudio) excludedAudio - track.key else excludedAudio + track.key
+    fun isAudioKept(season: Season, track: Track) = trackId(season.key, track.key) !in excludedAudio
+
+    fun isSubtitleKept(season: Season, track: Track) = trackId(season.key, track.key) !in excludedSubtitles
+
+    fun toggleAudio(season: Season, track: Track) {
+        val id = trackId(season.key, track.key)
+        excludedAudio = if (id in excludedAudio) excludedAudio - id else excludedAudio + id
     }
 
-    fun toggleSubtitle(track: Track) {
-        excludedSubtitles = if (track.key in excludedSubtitles) excludedSubtitles - track.key else excludedSubtitles + track.key
+    fun toggleSubtitle(season: Season, track: Track) {
+        val id = trackId(season.key, track.key)
+        excludedSubtitles = if (id in excludedSubtitles) excludedSubtitles - id else excludedSubtitles + id
     }
 
-    /** Voice-overs of the chosen episodes. */
-    val audioTracks: List<Track> get() = tracksOf(MediaStreamType.AUDIO)
+    /** Voice-overs and subtitles of the chosen episodes, season by season. */
+    val trackGroups: List<SeasonTracks>
+        get() = seasons.mapNotNull { season ->
+            val chosen = season.items.filter { it.id in selected && it.canConvert() }
+            if (chosen.isEmpty()) return@mapNotNull null
+            SeasonTracks(season, tracksOf(chosen, MediaStreamType.AUDIO), tracksOf(chosen, MediaStreamType.SUBTITLE))
+        }
 
-    val subtitleTracks: List<Track> get() = tracksOf(MediaStreamType.SUBTITLE)
-
-    private fun tracksOf(type: MediaStreamType): List<Track> {
+    private fun tracksOf(episodes: List<BaseItemDto>, type: MediaStreamType): List<Track> {
         val found = LinkedHashMap<String, Pair<String, Int>>()
-        for (item in selectedItems) {
+        for (item in episodes) {
             val streams = item.source()?.mediaStreams.orEmpty()
             for ((stream, key) in keyed(streams, type).distinctBy { it.second }) {
                 val (name, count) = found[key] ?: (label(stream) to 0)
                 found[key] = name to count + 1
             }
         }
-        return found.map { (key, value) -> Track(key, value.first, value.second) }
+        return found.map { (key, value) -> Track(key, value.first, value.second, episodes.size) }
     }
 
     /** How [item] is downloaded with what is chosen now (in [mode]). */
     fun optionsFor(item: BaseItemDto, mode: DownloadMode = this.mode): DownloadOptions {
         val source = item.source()
-        if (mode == DownloadMode.ORIGINAL || source == null || item.mediaType != MediaType.VIDEO) {
-            return DownloadOptions()
-        }
+        // Without a video track (or a file) the server cannot make it: the original then
+        if (mode == DownloadMode.ORIGINAL || source == null || !item.canConvert()) return DownloadOptions()
         val streams = source.mediaStreams.orEmpty()
+        val season = seasonKey(item)
         val transcode = mode == DownloadMode.TRANSCODE
         val options = DownloadOptions(
             mode = mode,
             mediaSourceId = source.id,
-            audioStreams = keyed(streams, MediaStreamType.AUDIO).filter { it.second !in excludedAudio }.map { it.first.index },
-            subtitleStreams = keyed(streams, MediaStreamType.SUBTITLE).filter { it.second !in excludedSubtitles }.map { it.first.index },
+            // None left (or none in this episode): the server keeps the default track
+            audioStreams = keyed(streams, MediaStreamType.AUDIO).filter { trackId(season, it.second) !in excludedAudio }.map { it.first.index },
+            subtitleStreams = keyed(streams, MediaStreamType.SUBTITLE).filter { trackId(season, it.second) !in excludedSubtitles }.map { it.first.index },
             videoCodec = if (transcode) videoCodec else DownloadOptions.COPY,
             audioCodec = if (transcode) audioCodec else DownloadOptions.COPY,
-            videoBitrate = if (transcode) quality.bitrate else null,
-            maxHeight = if (transcode) quality.maxHeight else null,
+            videoBitrate = if (transcode) videoBitrate(source) else null,
+            maxHeight = if (transcode) resolution.height else null,
             audioBitrate = if (transcode && audioCodec != DownloadOptions.COPY) DownloadOptions.defaultAudioBitrate(audioCodec) else null,
         )
         return options.copy(estimatedSize = estimate(source, options))
@@ -192,7 +224,45 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
 
     fun sizeOf(item: BaseItemDto): Long? = item.source()?.size
 
+    /** The typed limit, bit/s, when it is a number. */
+    val manualLimit: Int?
+        get() = manualMbits.replace(',', '.').toFloatOrNull()?.takeIf { it > 0 }?.let { (it * MBIT).toInt() }
+
+    /** The limit for the chosen codec and resolution (for the source resolution: of a 1080p file). */
+    val recommendedLimit: Int get() = recommendedBitrate(videoCodec, resolution.height ?: DEFAULT_HEIGHT)
+
+    /** Average video bitrate of the chosen episodes when transcoded, bit/s. */
+    val averageBitrate: Int?
+        get() = selectedItems.mapNotNull { item -> item.source()?.takeIf { item.canConvert() }?.let(::videoBitrate) }
+            .takeIf { it.isNotEmpty() }
+            ?.average()
+            ?.toInt()
+
+    /**
+     * Bitrate of the encoded video: what the source needs in the new codec and size (a weak source is
+     * not blown up), at most the limit - typed in, or recommended for the codec and resolution.
+     */
+    fun videoBitrate(source: MediaSourceInfo): Int {
+        val streams = source.mediaStreams.orEmpty()
+        val video = DownloadOptions.mainVideo(streams)
+        val sourceHeight = video?.height?.takeIf { it > 0 }
+        val targetHeight = listOfNotNull(sourceHeight, resolution.height).minOrNull() ?: DEFAULT_HEIGHT
+        val limit = (if (manualBitrate) manualLimit else null) ?: recommendedBitrate(videoCodec, targetHeight)
+
+        val sourceRate = video?.bitRate
+            ?: source.bitrate?.let { total -> total - streams.filter { it.type == MediaStreamType.AUDIO }.sumOf { it.bitRate ?: 0 } }?.takeIf { it > 0 }
+        val needed = sourceRate?.let { rate ->
+            val codecs = efficiency(videoCodec) / efficiency(video?.codec)
+            val scale = if (sourceHeight != null) (targetHeight.toDouble() / sourceHeight).coerceAtMost(1.0).pow(SCALE_EXPONENT) else 1.0
+            (rate * codecs * scale).toInt()
+        }
+        return minOf(needed ?: limit, limit).coerceAtLeast(MIN_BITRATE)
+    }
+
     private fun BaseItemDto.source(): MediaSourceInfo? = mediaSources?.firstOrNull()
+
+    private fun BaseItemDto.canConvert(): Boolean =
+        mediaType == MediaType.VIDEO && source()?.let { DownloadOptions.mainVideo(it.mediaStreams.orEmpty()) } != null
 
     private fun estimate(source: MediaSourceInfo, options: DownloadOptions): Long? {
         val seconds = (source.runTimeTicks ?: return source.size) / TICKS_PER_SECOND
@@ -222,6 +292,49 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         private const val TICKS_PER_SECOND = 10_000_000L
         private const val BITS_PER_BYTE = 8
         private const val DEFAULT_AUDIO_RATE = 192_000
+        const val MBIT = 1_000_000
+        private const val DEFAULT_HEIGHT = 1080
+        private const val MIN_BITRATE = 300_000
+
+        /** A smaller picture needs less, but not in proportion to its area. */
+        private const val SCALE_EXPONENT = 1.5
+
+        private fun seasonKey(item: BaseItemDto) = item.seasonId?.toString() ?: item.parentIndexNumber?.toString() ?: ""
+
+        private fun trackId(season: String, track: String) = "$season/$track"
+
+        /** Bitrate that looks good for the codec at that height, bit/s (the limit unless typed in). */
+        fun recommendedBitrate(codec: String, height: Int): Int {
+            val hevc = codec == DownloadOptions.HEVC
+            return when {
+                height > 1440 -> if (hevc) 10_000_000 else 16_000_000
+                height > 1080 -> if (hevc) 6_000_000 else 10_000_000
+                height > 720 -> if (hevc) 3_500_000 else 6_000_000
+                height > 480 -> if (hevc) 1_800_000 else 3_000_000
+                height > 360 -> if (hevc) 900_000 else 1_500_000
+                else -> if (hevc) 500_000 else 800_000
+            }
+        }
+
+        /** Bits a codec needs for the same picture, compared with H.264. */
+        private fun efficiency(codec: String?): Double = when (codec?.lowercase()) {
+            "hevc", "h265" -> 0.6
+            "av1" -> 0.5
+            "vp9" -> 0.65
+            "vc1", "wmv3" -> 1.2
+            "mpeg4", "msmpeg4v3", "h263" -> 1.5
+            "mpeg2video", "mpeg1video" -> 2.0
+            else -> 1.0
+        }
+
+        private fun isLocalHost(host: String): Boolean {
+            val h = host.lowercase()
+            if (h == "localhost" || h.endsWith(".local") || h.endsWith(".lan") || h.endsWith(".home.arpa")) return true
+            val parts = h.split('.').mapNotNull { it.toIntOrNull() }
+            if (parts.size != 4) return false
+            return parts[0] == 10 || parts[0] == 127 || (parts[0] == 192 && parts[1] == 168) ||
+                (parts[0] == 172 && parts[1] in 16..31) || (parts[0] == 100 && parts[1] in 64..127)
+        }
 
         /**
          * The tracks of [type] with the key that makes them the same in every episode: language and name,
