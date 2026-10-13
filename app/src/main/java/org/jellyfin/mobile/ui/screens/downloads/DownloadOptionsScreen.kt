@@ -1,7 +1,9 @@
 package org.jellyfin.mobile.ui.screens.downloads
 
 import android.text.format.Formatter
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -238,8 +239,14 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
                 for (group in groups) {
                     if (group.audio.isEmpty()) continue
                     if (bySeason) item(key = "audio-season-${group.season.key}") { SubHeader(seasonTitle(group.season.title)) }
+                    val defaultAudio = viewModel.defaultAudioOf(group)
                     items(group.audio, key = { "audio-${group.season.key}-${it.key}" }) { track ->
-                        TrackRow(track, checked = viewModel.isAudioKept(group.season, track)) { viewModel.toggleAudio(group.season, track) }
+                        TrackRow(
+                            track = track,
+                            checked = viewModel.isAudioKept(group.season, track),
+                            isDefault = track.key == defaultAudio,
+                            onDefault = { viewModel.setDefaultAudio(group.season, track) },
+                        ) { viewModel.toggleAudio(group.season, track) }
                     }
                     if (group.audio.none { viewModel.isAudioKept(group.season, it) } || group.audio.any { it.count < it.total }) {
                         item(key = "audio-hint-${group.season.key}") { Hint(stringResource(R.string.download_options_no_audio)) }
@@ -251,8 +258,28 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
                 for (group in groups) {
                     if (group.subtitles.isEmpty()) continue
                     if (bySeason) item(key = "subtitle-season-${group.season.key}") { SubHeader(seasonTitle(group.season.title)) }
+                    val defaultSubtitle = viewModel.defaultSubtitleOf(group)
                     items(group.subtitles, key = { "subtitle-${group.season.key}-${it.key}" }) { track ->
-                        TrackRow(track, checked = viewModel.isSubtitleKept(group.season, track)) { viewModel.toggleSubtitle(group.season, track) }
+                        TrackRow(
+                            track = track,
+                            checked = viewModel.isSubtitleKept(group.season, track),
+                            isDefault = track.key == defaultSubtitle,
+                            onDefault = { viewModel.setDefaultSubtitle(group.season, track) },
+                        ) { viewModel.toggleSubtitle(group.season, track) }
+                    }
+                    item(key = "subtitle-none-${group.season.key}") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.setDefaultSubtitle(group.season, null) }.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.download_options_no_default_subtitles),
+                                style = MaterialTheme.typography.body2,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                            )
+                            RadioButton(selected = defaultSubtitle == null, onClick = { viewModel.setDefaultSubtitle(group.season, null) })
+                        }
                     }
                 }
             }
@@ -391,23 +418,55 @@ private fun ModeRow(viewModel: DownloadOptionsViewModel, mode: DownloadMode, tit
 }
 
 @Composable
-private fun TrackRow(track: DownloadOptionsViewModel.Track, checked: Boolean, onToggle: () -> Unit) {
+private fun TrackRow(
+    track: DownloadOptionsViewModel.Track,
+    checked: Boolean,
+    isDefault: Boolean,
+    onDefault: () -> Unit,
+    onToggle: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 4.dp, end = 16.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 4.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = { onToggle() })
-        Text(track.label, style = MaterialTheme.typography.body1, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        // Episodes with the track of the chosen ones: those without keep their default track
-        if (track.total > 1) {
-            Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(track.label, style = MaterialTheme.typography.body1, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (track.forced) Badge(stringResource(R.string.download_options_forced))
+                // Episodes with the track of the chosen ones: those without keep their default track
+                if (track.total > 1) {
+                    Text(
+                        text = stringResource(R.string.download_options_track_count, track.count, track.total),
+                        style = MaterialTheme.typography.caption,
+                        color = if (track.count < track.total) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+            }
+        }
+        // Def: plays by default (the first kept track in episodes without it)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            RadioButton(selected = isDefault, onClick = onDefault, enabled = checked)
             Text(
-                text = stringResource(R.string.download_options_track_count, track.count, track.total),
-                style = MaterialTheme.typography.body2,
-                color = if (track.count < track.total) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                text = stringResource(R.string.download_options_default_short),
+                style = MaterialTheme.typography.overline,
+                color = MaterialTheme.colors.onSurface.copy(alpha = if (checked) 0.7f else 0.3f),
             )
         }
     }
+}
+
+@Composable
+private fun Badge(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.overline,
+        color = MaterialTheme.colors.onPrimary,
+        modifier = Modifier
+            .padding(end = 6.dp)
+            .background(MaterialTheme.colors.primary, RoundedCornerShape(3.dp))
+            .padding(horizontal = 4.dp, vertical = 1.dp),
+    )
 }
 
 @Composable

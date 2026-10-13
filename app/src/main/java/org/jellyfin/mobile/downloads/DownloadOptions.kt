@@ -46,6 +46,10 @@ data class DownloadOptions(
     val estimatedSize: Long? = null,
     /** Encoded audio keeps 5.1 and 7.1 instead of being mixed to stereo. */
     val keepChannels: Boolean = false,
+    /** The audio track that plays by default; the first kept one when null or not kept. */
+    val defaultAudio: Int? = null,
+    /** The subtitle track shown by default, [NO_SUBTITLE] - none; the first kept one when not kept. */
+    val defaultSubtitle: Int? = null,
 ) {
     val isOriginal: Boolean get() = mode == DownloadMode.ORIGINAL
 
@@ -59,6 +63,8 @@ data class DownloadOptions(
         maxHeight?.let { appendQueryParameter("maxHeight", it.toString()) }
         audioBitrate?.let { appendQueryParameter("audioBitrate", it.toString()) }
         if (keepChannels) appendQueryParameter("keepChannels", "true")
+        defaultAudio?.let { appendQueryParameter("defaultAudio", it.toString()) }
+        defaultSubtitle?.let { appendQueryParameter("defaultSubtitle", it.toString()) }
     }.build()
 
     /** `Show S01E01.mp4` → `Show S01E01.mkv`, or `Show S01E01.hevc.mkv` when encoded. */
@@ -79,22 +85,29 @@ data class DownloadOptions(
         val audio = keptAudio(streams, audioStreams)
         val subtitles = keptSubtitles(streams, subtitleStreams)
 
+        // As the server marks them: the chosen track, else the first kept one; subtitles as in the source when not chosen
+        val defaultAudioPosition = audio.indexOfFirst { it.index == defaultAudio }.coerceAtLeast(0)
+        val defaultSubtitlePosition = when (defaultSubtitle) {
+            null -> subtitles.indexOfFirst { it.index == source.defaultSubtitleStreamIndex }
+            NO_SUBTITLE -> -1
+            else -> if (subtitles.isEmpty()) -1 else subtitles.indexOfFirst { it.index == defaultSubtitle }.coerceAtLeast(0)
+        }
+
         val kept = buildList {
             video?.let { add(rewriteVideo(it)) }
-            audio.forEachIndexed { position, stream -> add(rewriteAudio(stream, position == 0)) }
-            subtitles.forEach { add(rewriteSubtitle(it)) }
+            audio.forEachIndexed { position, stream -> add(rewriteAudio(stream, position == defaultAudioPosition)) }
+            subtitles.forEachIndexed { position, stream -> add(rewriteSubtitle(stream).copy(isDefault = position == defaultSubtitlePosition)) }
         }.mapIndexed { index, stream -> stream.copy(index = index) }
 
         val firstAudio = if (video != null) 1 else 0
         val firstSubtitle = firstAudio + audio.size
-        val defaultSubtitle = subtitles.indexOfFirst { it.index == source.defaultSubtitleStreamIndex }.takeIf { it >= 0 }
 
         return source.copy(
             container = MATROSKA,
             mediaStreams = kept,
             mediaAttachments = if (subtitles.any { it.codec.equals("ass", true) || it.codec.equals("ssa", true) }) source.mediaAttachments else null,
-            defaultAudioStreamIndex = if (audio.isNotEmpty()) firstAudio else null,
-            defaultSubtitleStreamIndex = defaultSubtitle?.let { firstSubtitle + it },
+            defaultAudioStreamIndex = if (audio.isNotEmpty()) firstAudio + defaultAudioPosition else null,
+            defaultSubtitleStreamIndex = defaultSubtitlePosition.takeIf { it >= 0 }?.let { firstSubtitle + it },
             size = estimatedSize ?: source.size,
             bitrate = kept.mapNotNull { it.bitRate }.sum().takeIf { it > 0 } ?: source.bitrate,
         )
@@ -151,6 +164,9 @@ data class DownloadOptions(
 
     companion object {
         const val COPY = "copy"
+
+        /** [defaultSubtitle]: no subtitles by default. */
+        const val NO_SUBTITLE = -1
         const val H264 = "h264"
         const val HEVC = "hevc"
         const val AAC = "aac"

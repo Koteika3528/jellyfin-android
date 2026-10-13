@@ -39,7 +39,16 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
      * A voice-over or subtitle track, the same in all episodes of a season: same language and name.
      * @param count in how many of the season's chosen episodes it is, of [total].
      */
-    data class Track(val key: String, val label: String, val count: Int, val total: Int)
+    data class Track(
+        val key: String,
+        val label: String,
+        val count: Int,
+        val total: Int,
+        /** FRC: shown, not changed. */
+        val forced: Boolean = false,
+        /** In how many episodes it plays by default now. */
+        val defaultCount: Int = 0,
+    )
 
     /** The tracks of the chosen episodes of a season, chosen for the whole season. */
     data class SeasonTracks(val season: Season, val audio: List<Track>, val subtitles: List<Track>)
@@ -79,6 +88,10 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         private set
     var excludedSubtitles by mutableStateOf<Set<String>>(emptySet())
         private set
+
+    /** Def tracks chosen by season ([NO_DEFAULT] for subtitles: none); otherwise as most episodes have it. */
+    private var defaultAudioChoice by mutableStateOf<Map<String, String>>(emptyMap())
+    private var defaultSubtitleChoice by mutableStateOf<Map<String, String>>(emptyMap())
 
     var videoCodec by mutableStateOf(DownloadOptions.H264)
     var resolution by mutableStateOf(Resolution.P720)
@@ -179,6 +192,26 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         excludedSubtitles = if (id in excludedSubtitles) excludedSubtitles - id else excludedSubtitles + id
     }
 
+    fun setDefaultAudio(season: Season, track: Track) {
+        defaultAudioChoice = defaultAudioChoice + (season.key to track.key)
+    }
+
+    /** [track] null: no subtitles by default. */
+    fun setDefaultSubtitle(season: Season, track: Track?) {
+        defaultSubtitleChoice = defaultSubtitleChoice + (season.key to (track?.key ?: NO_DEFAULT))
+    }
+
+    /** The Def voice-over of a season: chosen, or the one most episodes play by default, or the first. */
+    fun defaultAudioOf(group: SeasonTracks): String? =
+        defaultAudioChoice[group.season.key] ?: group.audio.filter { it.defaultCount > 0 }.maxByOrNull { it.defaultCount }?.key ?: group.audio.firstOrNull()?.key
+
+    /** The Def subtitles of a season, null - none. */
+    fun defaultSubtitleOf(group: SeasonTracks): String? {
+        val chosen = defaultSubtitleChoice[group.season.key]
+        if (chosen != null) return chosen.takeIf { it != NO_DEFAULT }
+        return group.subtitles.filter { it.defaultCount > 0 }.maxByOrNull { it.defaultCount }?.key
+    }
+
     /** Voice-overs and subtitles of the chosen episodes, season by season. */
     val trackGroups: List<SeasonTracks>
         get() = seasons.mapNotNull { season ->
@@ -188,31 +221,50 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         }
 
     private fun tracksOf(episodes: List<BaseItemDto>, type: MediaStreamType): List<Track> {
-        val found = LinkedHashMap<String, Pair<String, Int>>()
+        val found = LinkedHashMap<String, Track>()
         for (item in episodes) {
             val streams = item.source()?.mediaStreams.orEmpty()
-            for ((stream, key) in keyed(streams, type).distinctBy { it.second }) {
-                val (name, count) = found[key] ?: (label(stream) to 0)
-                found[key] = name to count + 1
+            val keyedStreams = keyed(streams, type)
+            for ((stream, key) in keyedStreams.distinctBy { it.second }) {
+                val track = found[key] ?: Track(key, label(stream), 0, episodes.size, forced = stream.isForced)
+                val isDefault = keyedStreams.any { it.second == key && it.first.isDefault }
+                found[key] = track.copy(count = track.count + 1, defaultCount = track.defaultCount + if (isDefault) 1 else 0)
             }
         }
-        return found.map { (key, value) -> Track(key, value.first, value.second, episodes.size) }
+        return found.values.toList()
     }
 
+    /** Def keys (audio, subtitles) of each season, for [optionsFor]. */
+    private fun defaultsBySeason(): Map<String, Pair<String?, String?>> =
+        trackGroups.associate { group -> group.season.key to (defaultAudioOf(group) to defaultSubtitleOf(group)) }
+
     /** How [item] is downloaded with what is chosen now (in [mode]). */
-    fun optionsFor(item: BaseItemDto, mode: DownloadMode = this.mode): DownloadOptions {
+    fun optionsFor(
+        item: BaseItemDto,
+        mode: DownloadMode = this.mode,
+        defaults: Map<String, Pair<String?, String?>> = defaultsBySeason(),
+    ): DownloadOptions {
         val source = item.source()
         // Without a video track (or a file) the server cannot make it: the original then
         if (mode == DownloadMode.ORIGINAL || source == null || !item.canConvert()) return DownloadOptions()
         val streams = source.mediaStreams.orEmpty()
         val season = seasonKey(item)
         val transcode = mode == DownloadMode.TRANSCODE
+        val keptAudio = keyed(streams, MediaStreamType.AUDIO).filter { trackId(season, it.second) !in excludedAudio }
+        val keptSubtitles = keyed(streams, MediaStreamType.SUBTITLE).filter { trackId(season, it.second) !in excludedSubtitles }
+        val (defaultAudioKey, defaultSubtitleKey) = defaults[season] ?: (null to null)
         val options = DownloadOptions(
             mode = mode,
             mediaSourceId = source.id,
             // None left (or none in this episode): the server keeps the default track
-            audioStreams = keyed(streams, MediaStreamType.AUDIO).filter { trackId(season, it.second) !in excludedAudio }.map { it.first.index },
-            subtitleStreams = keyed(streams, MediaStreamType.SUBTITLE).filter { trackId(season, it.second) !in excludedSubtitles }.map { it.first.index },
+            audioStreams = keptAudio.map { it.first.index },
+            subtitleStreams = keptSubtitles.map { it.first.index },
+            // Def: the season's choice; an episode without it plays its first kept track
+            defaultAudio = keptAudio.firstOrNull { it.second == defaultAudioKey }?.first?.index,
+            defaultSubtitle = when (defaultSubtitleKey) {
+                null -> DownloadOptions.NO_SUBTITLE
+                else -> (keptSubtitles.firstOrNull { it.second == defaultSubtitleKey } ?: keptSubtitles.firstOrNull())?.first?.index ?: DownloadOptions.NO_SUBTITLE
+            },
             videoCodec = if (transcode) videoCodec else DownloadOptions.COPY,
             audioCodec = if (transcode) audioCodec else DownloadOptions.COPY,
             videoBitrate = if (transcode) videoBitrate(source) else null,
@@ -224,11 +276,16 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
     }
 
     /** Size of the chosen items as [mode] would make them, null when the server does not know it. */
-    fun estimatedSize(mode: DownloadMode = this.mode): Long? = selectedItems.sumOf { item ->
-        val source = item.source() ?: return@sumOf 0L
-        val options = optionsFor(item, mode)
-        (if (options.isOriginal) source.size else options.estimatedSize) ?: 0L
-    }.takeIf { it > 0 }
+    fun estimatedSize(mode: DownloadMode = this.mode): Long? {
+        val defaults = defaultsBySeason()
+        return selectedItems.sumOf { item -> sizeWith(item, mode, defaults) }.takeIf { it > 0 }
+    }
+
+    private fun sizeWith(item: BaseItemDto, mode: DownloadMode, defaults: Map<String, Pair<String?, String?>>): Long {
+        val source = item.source() ?: return 0L
+        val options = optionsFor(item, mode, defaults)
+        return (if (options.isOriginal) source.size else options.estimatedSize) ?: 0L
+    }
 
     fun sizeOf(item: BaseItemDto): Long? = item.source()?.size
 
@@ -310,6 +367,8 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         private fun seasonKey(item: BaseItemDto) = item.seasonId?.toString() ?: item.parentIndexNumber?.toString() ?: ""
 
         private fun trackId(season: String, track: String) = "$season/$track"
+
+        private const val NO_DEFAULT = "-"
 
         /** Bitrate that looks good for the codec at that height, bit/s (the limit unless typed in). */
         fun recommendedBitrate(codec: String, height: Int): Int {

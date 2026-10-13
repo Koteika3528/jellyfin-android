@@ -342,4 +342,7 @@
     <string name="download_options_insecure">The server address is http: the download is not encrypted and the provider can see and slow it down. An https address of the server helps.</string>
     <string name="download_audio_keep_channels">Keep 5.1 / 7.1</string>
     <string name="download_audio_keep_channels_description">Surround tracks stay surround (bigger), stereo otherwise</string>
+    <string name="download_options_no_default_subtitles">No subtitles by default</string>
+    <string name="download_options_default_short">Def</string>
+    <string name="download_options_forced">FRC</string>
 </resources>
