@@ -151,7 +151,13 @@ fun DownloadItem(
             }
         },
         secondaryText = {
-            if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.QUEUED) {
+            if (download.status == DownloadStatus.PAUSED) {
+                Text(
+                    text = stringResource(R.string.download_paused),
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                )
+            } else if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.QUEUED) {
                 // Downloaded / total and speed of the running file, for debugging slow downloads
                 val live = DownloadProgressTracker.progress.collectAsState().value[download.id]
                 if (live != null) {

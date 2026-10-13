@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Icon
@@ -34,13 +35,16 @@ import androidx.compose.material.OutlinedButton
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import org.jellyfin.mobile.downloads.OfflinePlayback
 import androidx.compose.material.ScrollableTabRow
 import androidx.compose.material.Tab
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -49,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -67,6 +72,7 @@ import coil3.compose.AsyncImage
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.downloads.DownloadProgressTracker
+import org.jellyfin.mobile.downloads.DownloadStatus
 import org.jellyfin.mobile.downloads.NotificationProgressCallback
 import org.jellyfin.mobile.downloads.OfflineEntry
 import org.jellyfin.mobile.downloads.OfflineGroup
@@ -103,6 +109,9 @@ class BrowseActions(
     val setFollowed: (OfflineEntry, Boolean) -> Unit = { _, _ -> },
     /** Whether followed shows get new episodes at all (the setting is not off). */
     val newEpisodesEnabled: Boolean = false,
+    val pauseAll: () -> Unit = {},
+    val resumeAll: () -> Unit = {},
+    val cancelAll: () -> Unit = {},
 )
 
 @Composable
@@ -132,7 +141,7 @@ private fun RootView(index: OfflineIndex, actions: BrowseActions, selection: Set
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         // Running downloads take one row here, their list is a page of its own
         if (index.active.isNotEmpty()) {
-            item(key = "active") { ActiveRow(index, onClick = { actions.navigate(BrowseLocation.Active) }) }
+            item(key = "active") { ActiveRow(index, actions, onClick = { actions.navigate(BrowseLocation.Active) }) }
             item { SectionHeader(stringResource(R.string.downloads_libraries)) }
         }
         items(index.libraries, key = { "library-$it" }) { library ->
@@ -149,10 +158,26 @@ private fun RootView(index: OfflineIndex, actions: BrowseActions, selection: Set
 }
 
 @Composable
-private fun ActiveRow(index: OfflineIndex, onClick: () -> Unit) {
+private fun ActiveRow(index: OfflineIndex, actions: BrowseActions, onClick: () -> Unit) {
     val context = LocalContext.current
     val live = DownloadProgressTracker.progress.collectAsState().value
     val speed = live.values.sumOf { it.bytesPerSecond }
+    val paused = index.active.isNotEmpty() && index.active.all { it.download.status == DownloadStatus.PAUSED || it.download.status == DownloadStatus.ERROR || it.download.status == DownloadStatus.CANCELLED } &&
+        index.active.any { it.download.status == DownloadStatus.PAUSED }
+    var confirmCancel by remember { mutableStateOf(false) }
+    if (confirmCancel) {
+        AlertDialog(
+            onDismissRequest = { confirmCancel = false },
+            text = { Text(stringResource(R.string.download_cancel_all_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCancel = false
+                    actions.cancelAll()
+                }) { Text(stringResource(R.string.download_cancel_all)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text(stringResource(R.string.downloads_offer_later)) } },
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -165,7 +190,13 @@ private fun ActiveRow(index: OfflineIndex, onClick: () -> Unit) {
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text(stringResource(R.string.downloads_active_open, index.active.size), style = MaterialTheme.typography.subtitle1)
             val running = live.values.firstOrNull()
-            if (running != null) {
+            if (paused) {
+                Text(
+                    text = stringResource(R.string.download_paused),
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                )
+            } else if (running != null) {
                 Text(
                     text = NotificationProgressCallback.describe(context, running.downloaded, running.total, speed),
                     style = MaterialTheme.typography.body2,
@@ -175,7 +206,15 @@ private fun ActiveRow(index: OfflineIndex, onClick: () -> Unit) {
                 )
             }
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        IconButton(onClick = { if (paused) actions.resumeAll() else actions.pauseAll() }) {
+            Icon(
+                imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                contentDescription = stringResource(if (paused) R.string.download_resume else R.string.download_pause),
+            )
+        }
+        IconButton(onClick = { confirmCancel = true }) {
+            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.download_cancel_all))
+        }
     }
 }
 

@@ -26,6 +26,7 @@ class DownloadManager(
     private val appPreferences: AppPreferences,
     private val storageManager: StorageManager,
     private val offlineLibrary: OfflineLibrary,
+    private val downloadNotificationManager: DownloadNotificationManager,
 ) {
     companion object {
         /**
@@ -150,6 +151,38 @@ class DownloadManager(
         }
         Timber.i("Resuming ${pending.size} interrupted downloads")
         DownloadWorker.start(context, appPreferences)
+    }
+
+    /** Pauses every queued and running download (notification and downloads screen). */
+    suspend fun pauseAll() = withContext(Dispatchers.IO) {
+        val pending = downloadDao.getQueuedDownloads()
+        if (pending.isEmpty()) return@withContext
+        // Paused first, so the stopped work does not put them back into the queue
+        for ((download, _) in pending) downloadDao.update(download.copy(status = DownloadStatus.PAUSED))
+        DownloadWorker.stop(context)
+        pending.forEach { DownloadProgressTracker.remove(it.download.id) }
+        downloadNotificationManager.showPaused(pending.size)
+    }
+
+    suspend fun resumeAll() = withContext(Dispatchers.IO) {
+        val paused = downloadDao.getPausedDownloads()
+        for (download in paused) downloadDao.update(download.copy(status = DownloadStatus.QUEUED))
+        downloadNotificationManager.hidePaused()
+        if (paused.isNotEmpty() && !DownloadWorker.isActive(context)) DownloadWorker.start(context, appPreferences)
+    }
+
+    /** Cancels everything that is not downloaded yet, with its partial files. */
+    suspend fun cancelAll() = withContext(Dispatchers.IO) {
+        // Out of the queue first, so the work does not pick the next one meanwhile
+        val unfinished = downloadDao.getUnfinishedDownloads()
+        for (download in unfinished) downloadDao.update(download.copy(status = DownloadStatus.PAUSED))
+        DownloadWorker.stop(context)
+        for (download in unfinished) {
+            DownloadProgressTracker.remove(download.id)
+            delete(download.id, deleteFiles = true)
+        }
+        downloadNotificationManager.hidePaused()
+        downloadNotificationManager.hideProgress()
     }
 
     suspend fun resume(downloadEntity: DownloadEntity) = withContext(Dispatchers.IO) {

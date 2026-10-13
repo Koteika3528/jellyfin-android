@@ -205,6 +205,18 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         musicPlayer.play(items, index.coerceAtMost(items.lastIndex))
     }
 
+    fun pauseDownloads() {
+        viewModelScope.launch { downloadManager.pauseAll() }
+    }
+
+    fun resumeDownloads() {
+        viewModelScope.launch { downloadManager.resumeAll() }
+    }
+
+    fun cancelAllDownloads() {
+        viewModelScope.launch { downloadManager.cancelAll() }
+    }
+
     fun togglePlayPause() = musicPlayer.togglePlayPause()
 
     fun playNext() = musicPlayer.next()

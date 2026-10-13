@@ -6,4 +6,7 @@ enum class DownloadStatus {
     DOWNLOADED,
     ERROR,
     CANCELLED,
+
+    /** Stopped by the user ("Pause"), continues with "Resume". */
+    PAUSED,
 }

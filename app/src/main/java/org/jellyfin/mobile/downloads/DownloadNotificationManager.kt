@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.downloads
 
+import android.app.PendingIntent
 import android.text.format.Formatter
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,6 +19,7 @@ class DownloadNotificationManager(
     companion object {
         const val CHANNEL_ID = "downloads"
         const val NOTIFICATION_ID = 67
+        const val PAUSED_NOTIFICATION_ID = 68
     }
 
     private val notificationManager = requireNotNull(context.getSystemService<NotificationManager>())
@@ -45,6 +47,31 @@ class DownloadNotificationManager(
     )
 
     fun downloadFile(id: Long, name: String) = NotificationProgressCallback(context, notificationManager, id, name)
+
+    /** "N downloads paused" with Resume and Cancel all. */
+    fun showPaused(count: Int) {
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID).apply {
+            setContentTitle(context.getString(R.string.downloads_paused_title))
+            setContentText(context.getString(R.string.downloads_paused_count, count))
+            setSmallIcon(android.R.drawable.stat_sys_download_done)
+            setPriority(NotificationCompat.PRIORITY_LOW)
+            setOnlyAlertOnce(true)
+            addAction(action(R.string.download_resume, DownloadBroadcastReceiver.resumeAllIntent(context), REQUEST_RESUME))
+            addAction(action(R.string.download_cancel_all, DownloadBroadcastReceiver.cancelAllIntent(context), REQUEST_CANCEL_ALL))
+        }.build()
+        notificationManager.cancel(NOTIFICATION_ID)
+        notificationManager.notify(PAUSED_NOTIFICATION_ID, notification)
+    }
+
+    fun hidePaused() = notificationManager.cancel(PAUSED_NOTIFICATION_ID)
+
+    fun hideProgress() = notificationManager.cancel(NOTIFICATION_ID)
+
+    private fun action(title: Int, intent: android.content.Intent, requestCode: Int) = NotificationCompat.Action.Builder(
+        null,
+        context.getString(title),
+        PendingIntentCompat.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT, false),
+    ).build()
 }
 
 class NotificationProgressCallback(
@@ -69,6 +96,13 @@ class NotificationProgressCallback(
                 DownloadBroadcastReceiver.cancelDownloadIntent(context, downloadId),
                 0,
                 false,
+            )
+            addAction(
+                NotificationCompat.Action.Builder(
+                    null,
+                    context.getString(R.string.download_pause),
+                    PendingIntentCompat.getBroadcast(context, REQUEST_PAUSE, DownloadBroadcastReceiver.pauseAllIntent(context), PendingIntent.FLAG_UPDATE_CURRENT, false),
+                ).build(),
             )
             addAction(
                 NotificationCompat.Action.Builder(
@@ -126,3 +160,7 @@ class NotificationProgressCallback(
 
     suspend fun onEnd() = onProgress(Long.MAX_VALUE, Long.MAX_VALUE)
 }
+
+private const val REQUEST_PAUSE = 1
+private const val REQUEST_RESUME = 2
+private const val REQUEST_CANCEL_ALL = 3

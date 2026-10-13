@@ -278,4 +278,11 @@
     <string name="downloads_active_open">Загружается: %1$d</string>
     <string name="download_waiting">В очереди</string>
     <string name="download_starting">Подключение…</string>
+    <string name="download_pause">Пауза</string>
+    <string name="download_resume">Продолжить</string>
+    <string name="download_cancel_all">Отменить всё</string>
+    <string name="downloads_paused_title">Загрузки на паузе</string>
+    <string name="downloads_paused_count">Ждут продолжения: %1$d</string>
+    <string name="download_paused">На паузе</string>
+    <string name="download_cancel_all_confirm">Отменить все недокачанные загрузки?</string>
 </resources>

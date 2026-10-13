@@ -396,6 +396,9 @@ fun DownloadsScreen(
                     isFollowed = { entry -> follows.any { it.seriesId == entry.item.seriesId?.toString() } },
                     setFollowed = { entry, followed -> viewModel.setFollowed(entry.download, followed) },
                     newEpisodesEnabled = viewModel.newEpisodesEnabled,
+                    pauseAll = { viewModel.pauseDownloads() },
+                    resumeAll = { viewModel.resumeDownloads() },
+                    cancelAll = { viewModel.cancelAllDownloads() },
                 )
                 if (location is BrowseLocation.Storage && searchQuery.isBlank()) {
                     StorageView(

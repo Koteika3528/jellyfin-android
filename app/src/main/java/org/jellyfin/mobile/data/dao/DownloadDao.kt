@@ -56,6 +56,12 @@ interface DownloadDao {
     @Query("SELECT * FROM download")
     fun getAllDownloadsNow(): List<DownloadEntity>
 
+    @Query("SELECT * FROM download WHERE status = 'PAUSED'")
+    suspend fun getPausedDownloads(): List<DownloadEntity>
+
+    @Query("SELECT * FROM download WHERE status != 'DOWNLOADED'")
+    suspend fun getUnfinishedDownloads(): List<DownloadEntity>
+
     @Query("SELECT item_id FROM download")
     suspend fun getAllItemIds(): List<UUID>
 
