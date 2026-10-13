@@ -330,4 +330,6 @@
     <string name="download_bitrate_field">Лимит, Мбит/с</string>
     <string name="download_bitrate_average">В среднем по выбранным сериям: ≈ %1$s Мбит/с</string>
     <string name="download_options_insecure">Адрес сервера — http: загрузка идёт без шифрования, провайдер видит её и может замедлять. Поможет https-адрес сервера.</string>
+    <string name="download_audio_keep_channels">Сохранять 5.1 / 7.1</string>
+    <string name="download_audio_keep_channels_description">Многоканальные дорожки останутся многоканальными (больше размер), иначе — стерео</string>
 </resources>

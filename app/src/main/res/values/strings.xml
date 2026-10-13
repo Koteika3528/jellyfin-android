@@ -340,4 +340,6 @@
     <string name="download_bitrate_field">Limit, Mbit/s</string>
     <string name="download_bitrate_average">On average for the chosen episodes: ≈ %1$s Mbit/s</string>
     <string name="download_options_insecure">The server address is http: the download is not encrypted and the provider can see and slow it down. An https address of the server helps.</string>
+    <string name="download_audio_keep_channels">Keep 5.1 / 7.1</string>
+    <string name="download_audio_keep_channels_description">Surround tracks stay surround (bigger), stereo otherwise</string>
 </resources>

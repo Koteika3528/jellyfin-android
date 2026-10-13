@@ -44,6 +44,8 @@ data class DownloadOptions(
     val maxHeight: Int? = null,
     val audioBitrate: Int? = null,
     val estimatedSize: Long? = null,
+    /** Encoded audio keeps 5.1 and 7.1 instead of being mixed to stereo. */
+    val keepChannels: Boolean = false,
 ) {
     val isOriginal: Boolean get() = mode == DownloadMode.ORIGINAL
 
@@ -56,6 +58,7 @@ data class DownloadOptions(
         videoBitrate?.let { appendQueryParameter("videoBitrate", it.toString()) }
         maxHeight?.let { appendQueryParameter("maxHeight", it.toString()) }
         audioBitrate?.let { appendQueryParameter("audioBitrate", it.toString()) }
+        if (keepChannels) appendQueryParameter("keepChannels", "true")
     }.build()
 
     /** `Show S01E01.mp4` → `Show S01E01.mkv`, or `Show S01E01.hevc.mkv` when encoded. */
@@ -124,13 +127,14 @@ data class DownloadOptions(
         val encoded = if (audioCodec == COPY) {
             stream
         } else {
+            val channels = encodedChannels(stream, keepChannels)
             stream.copy(
                 codec = audioCodec,
                 codecTag = null,
                 profile = null,
-                channels = minOf(stream.channels ?: 2, 2),
-                channelLayout = "stereo",
-                bitRate = audioBitrate ?: defaultAudioBitrate(audioCodec),
+                channels = channels,
+                channelLayout = if (channels <= 2) (if (channels == 1) "mono" else "stereo") else stream.channelLayout,
+                bitRate = encodedAudioRate(stream, audioCodec, audioBitrate, keepChannels),
             )
         }
         return encoded.copy(isDefault = default)
@@ -158,6 +162,17 @@ data class DownloadOptions(
 
         /** What the server encodes with when no audio bitrate is given. */
         fun defaultAudioBitrate(codec: String) = if (codec == OPUS) 128_000 else 160_000
+
+        /** Channels of an encoded track, as the server makes them: mono stays mono, surround only when kept. */
+        fun encodedChannels(stream: MediaStream, keepChannels: Boolean): Int =
+            (stream.channels ?: 2).coerceIn(1, if (keepChannels) 8 else 2)
+
+        /** Bitrate of an encoded track, as the server gives it: the stereo rate, more for more channels. */
+        fun encodedAudioRate(stream: MediaStream, codec: String, stereoRate: Int?, keepChannels: Boolean): Int {
+            val rate = (stereoRate ?: defaultAudioBitrate(codec)).coerceIn(32_000, 640_000)
+            val channels = encodedChannels(stream, keepChannels)
+            return if (channels > 2) minOf(rate * channels / 2, 1_024_000) else rate
+        }
 
         /** The video the server keeps (not a cover picture). */
         fun mainVideo(streams: List<MediaStream>): MediaStream? = streams.firstOrNull { stream ->

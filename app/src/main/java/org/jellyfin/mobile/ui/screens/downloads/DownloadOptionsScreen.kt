@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -271,10 +272,11 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
             }
             item(key = "resolution") { Header(stringResource(R.string.download_options_resolution)) }
             item(key = "resolutions") {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                // Wraps to a second line on narrow screens instead of running off the edge
+                FlowRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
                     for (resolution in Resolution.entries) {
                         Row(
-                            modifier = Modifier.clickable { viewModel.resolution = resolution },
+                            modifier = Modifier.clickable { viewModel.resolution = resolution }.padding(end = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(selected = viewModel.resolution == resolution, onClick = { viewModel.resolution = resolution })
@@ -326,6 +328,22 @@ private fun OptionsList(viewModel: DownloadOptionsViewModel, modifier: Modifier,
                     }
                     Choice(viewModel.audioCodec == DownloadOptions.COPY, stringResource(R.string.download_audio_copy), null) {
                         viewModel.audioCodec = DownloadOptions.COPY
+                    }
+                    if (viewModel.audioCodec != DownloadOptions.COPY && viewModel.hasSurround) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.keepChannels = !viewModel.keepChannels }.padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = viewModel.keepChannels, onCheckedChange = { viewModel.keepChannels = it })
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text(stringResource(R.string.download_audio_keep_channels), style = MaterialTheme.typography.body1)
+                                Text(
+                                    text = stringResource(R.string.download_audio_keep_channels_description),
+                                    style = MaterialTheme.typography.caption,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                                )
+                            }
+                        }
                     }
                 }
             }

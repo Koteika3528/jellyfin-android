@@ -84,6 +84,13 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
     var resolution by mutableStateOf(Resolution.P720)
     var audioCodec by mutableStateOf(DownloadOptions.AAC)
 
+    /** Encoded audio keeps 5.1 and 7.1 (bigger), stereo otherwise. */
+    var keepChannels by mutableStateOf(false)
+
+    /** Some chosen episode has surround audio: keeping it is offered. */
+    val hasSurround: Boolean
+        get() = selectedItems.any { item -> item.source()?.mediaStreams.orEmpty().any { it.type == MediaStreamType.AUDIO && (it.channels ?: 0) > 2 } }
+
     /** The bitrate limit is typed in ([manualMbits]) instead of the recommended one. */
     var manualBitrate by mutableStateOf(false)
     var manualMbits by mutableStateOf("")
@@ -211,6 +218,7 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
             videoBitrate = if (transcode) videoBitrate(source) else null,
             maxHeight = if (transcode) resolution.height else null,
             audioBitrate = if (transcode && audioCodec != DownloadOptions.COPY) DownloadOptions.defaultAudioBitrate(audioCodec) else null,
+            keepChannels = transcode && audioCodec != DownloadOptions.COPY && keepChannels,
         )
         return options.copy(estimatedSize = estimate(source, options))
     }
@@ -271,7 +279,7 @@ class DownloadOptionsViewModel : ViewModel(), KoinComponent {
         val audioRate = if (options.audioCodec == DownloadOptions.COPY) {
             audio.sumOf { it.bitRate ?: DEFAULT_AUDIO_RATE }.toLong()
         } else {
-            audio.size.toLong() * (options.audioBitrate ?: DownloadOptions.defaultAudioBitrate(options.audioCodec))
+            audio.sumOf { DownloadOptions.encodedAudioRate(it, options.audioCodec, options.audioBitrate, options.keepChannels).toLong() }
         }
         val videoRate = if (options.videoCodec == DownloadOptions.COPY) {
             val video = DownloadOptions.mainVideo(streams)
