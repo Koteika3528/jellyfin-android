@@ -6,7 +6,9 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
@@ -24,6 +26,7 @@ class DownloadedMusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var reporter: ServerPlaybackReporter? = null
     private val apiClient: ApiClient by inject()
+    private val musicCache: MusicCache by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -37,7 +40,11 @@ class DownloadedMusicService : MediaSessionService() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
 
+        // Streamed music goes through the cache (played again - from the phone), files directly
+        val mediaSourceFactory = DefaultMediaSourceFactory(musicCache.dataSourceFactory(DefaultDataSource.Factory(this)))
+
         val player = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()

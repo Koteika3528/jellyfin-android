@@ -352,4 +352,22 @@
     <string name="pref_native_music_player_title">Play music in the app\'s player</string>
     <string name="pref_native_music_player_summary">Music from the web client plays in the app\'s own player: mini player, full screen, notification, downloaded tracks from the phone</string>
     <string name="music_reverse">Reverse order</string>
+    <string name="pref_music_cache">Music cache</string>
+    <string name="pref_music_cache_size">Up to the size limit</string>
+    <string name="pref_music_cache_size_summary">Tracks played longest ago go first</string>
+    <string name="pref_music_cache_days">Keep for some days</string>
+    <string name="pref_music_cache_days_summary">Tracks not played for that long go when the app starts</string>
+    <string name="pref_music_cache_start">Until the app restarts</string>
+    <string name="pref_music_cache_start_summary">Emptied every time the app starts</string>
+    <string name="pref_music_cache_off">Off</string>
+    <string name="pref_music_cache_off_summary">Music is fetched from the server every time</string>
+    <string name="pref_music_cache_days_title">Keep cached music for</string>
+    <string name="pref_music_cache_limit">Music cache size</string>
+    <string name="pref_music_cache_limit_summary">Applies after the app restarts</string>
+    <string name="storage_music_cache">Music cache</string>
+    <string name="storage_music_cache_clear">Clear</string>
+    <plurals name="pref_music_cache_days_value">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
 </resources>

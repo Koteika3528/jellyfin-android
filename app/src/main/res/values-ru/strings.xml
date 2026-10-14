@@ -342,4 +342,24 @@
     <string name="pref_native_music_player_title">Музыка в плеере приложения</string>
     <string name="pref_native_music_player_summary">Музыка из веб-интерфейса играет в собственном плеере приложения: мини-плеер, полный экран, уведомление, скачанные треки - с телефона</string>
     <string name="music_reverse">В обратном порядке</string>
+    <string name="pref_music_cache">Кеш музыки</string>
+    <string name="pref_music_cache_size">До предела размера</string>
+    <string name="pref_music_cache_size_summary">Первыми удаляются давно не слушанные треки</string>
+    <string name="pref_music_cache_days">Хранить несколько дней</string>
+    <string name="pref_music_cache_days_summary">Не слушанные столько дней удаляются при запуске приложения</string>
+    <string name="pref_music_cache_start">До перезапуска приложения</string>
+    <string name="pref_music_cache_start_summary">Очищается при каждом запуске</string>
+    <string name="pref_music_cache_off">Выключен</string>
+    <string name="pref_music_cache_off_summary">Музыка каждый раз загружается с сервера</string>
+    <string name="pref_music_cache_days_title">Сколько хранить кеш музыки</string>
+    <string name="pref_music_cache_limit">Размер кеша музыки</string>
+    <string name="pref_music_cache_limit_summary">Применяется после перезапуска приложения</string>
+    <string name="storage_music_cache">Кеш музыки</string>
+    <string name="storage_music_cache_clear">Очистить</string>
+    <plurals name="pref_music_cache_days_value">
+        <item quantity="one">%d день</item>
+        <item quantity="few">%d дня</item>
+        <item quantity="many">%d дней</item>
+        <item quantity="other">%d дня</item>
+    </plurals>
 </resources>

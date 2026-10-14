@@ -1,5 +1,14 @@
 package org.jellyfin.mobile.ui.screens.downloads
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.jellyfin.mobile.downloads.MusicCache
+import org.koin.compose.koinInject
 import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +42,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -69,7 +80,33 @@ fun StorageView(
 
     fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
 
+    // Streamed music kept on the phone (see MusicCache), not part of the downloads
+    val musicCache: MusicCache = koinInject()
+    var cacheBytes by remember { mutableLongStateOf(-1L) }
+    var cacheVersion by remember { mutableIntStateOf(0) }
+    LaunchedEffect(cacheVersion) { cacheBytes = withContext(Dispatchers.IO) { musicCache.usedBytes() } }
+    val scope = rememberCoroutineScope()
+
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (cacheBytes > 0) {
+            item(key = "music-cache") {
+                Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
+                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.storage_music_cache) + " · " + size(cacheBytes),
+                            style = MaterialTheme.typography.body1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) { musicCache.clear() }
+                                cacheVersion++
+                            }
+                        }) { Text(stringResource(R.string.storage_music_cache_clear)) }
+                    }
+                }
+            }
+        }
         item {
             Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {

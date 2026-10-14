@@ -106,6 +106,16 @@ class AppPreferences(context: Context) {
     val nativeMusicPlayer: Boolean
         get() = sharedPreferences.getBoolean(Constants.PREF_NATIVE_MUSIC_PLAYER, true)
 
+    /** See [org.jellyfin.mobile.downloads.MusicCacheMode]; by default only the size limit. */
+    val musicCacheMode: Int
+        get() = sharedPreferences.getInt(Constants.PREF_MUSIC_CACHE_MODE, 3)
+
+    val musicCacheDays: Int
+        get() = sharedPreferences.getInt(Constants.PREF_MUSIC_CACHE_DAYS, 7)
+
+    val musicCacheLimitMb: Int
+        get() = sharedPreferences.getInt(Constants.PREF_MUSIC_CACHE_LIMIT_MB, 500)
+
     val meteredMaxBitrate: Int
         get() = sharedPreferences.getInt(Constants.PREF_METERED_MAX_BITRATE, 0)
 

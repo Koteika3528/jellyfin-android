@@ -33,6 +33,7 @@ import org.jellyfin.mobile.bridge.NativeAudio
 import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadedMusicPlayer
 import org.jellyfin.mobile.downloads.StreamedMusic
+import org.jellyfin.mobile.downloads.MusicCache
 import org.jellyfin.mobile.downloads.DownloadNotificationManager
 import org.jellyfin.mobile.downloads.DownloadOptionsViewModel
 import org.jellyfin.mobile.downloads.DownloadQueue
@@ -91,6 +92,7 @@ val applicationModule = module {
     // One music player for the web client and the downloads (its service plays, this is the controller)
     single { DownloadedMusicPlayer(androidApplication()) }
     single { StreamedMusic(androidApplication(), get(), get(), get()) }
+    single { MusicCache(androidApplication(), get(), get()) }
     single { NativeAudio(get(), get(), get()) }
     single { MediaSegments(get()) }
 

@@ -31,6 +31,7 @@ import org.jellyfin.mobile.downloads.AutoMode
 import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadMethod
 import org.jellyfin.mobile.downloads.MobileDataPolicy
+import org.jellyfin.mobile.downloads.MusicCacheMode
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.BackPressInterceptor
@@ -107,6 +108,35 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
             titleRes = R.string.pref_native_music_player_title
             summaryRes = R.string.pref_native_music_player_summary
             defaultValue = true
+        }
+        singleChoice(
+            Constants.PREF_MUSIC_CACHE_MODE,
+            listOf(
+                SelectionItem(MusicCacheMode.SIZE_LIMIT.intValue, R.string.pref_music_cache_size, R.string.pref_music_cache_size_summary),
+                SelectionItem(MusicCacheMode.KEEP_DAYS.intValue, R.string.pref_music_cache_days, R.string.pref_music_cache_days_summary),
+                SelectionItem(MusicCacheMode.CLEAR_ON_START.intValue, R.string.pref_music_cache_start, R.string.pref_music_cache_start_summary),
+                SelectionItem(MusicCacheMode.OFF.intValue, R.string.pref_music_cache_off, R.string.pref_music_cache_off_summary),
+            ),
+        ) {
+            titleRes = R.string.pref_music_cache
+            initialSelection = MusicCacheMode.SIZE_LIMIT.intValue
+        }
+        singleChoice(
+            Constants.PREF_MUSIC_CACHE_DAYS,
+            listOf(1, 3, 7, 14, 30).map { days -> SelectionItem(days, resources.getQuantityString(R.plurals.pref_music_cache_days_value, days, days)) },
+        ) {
+            titleRes = R.string.pref_music_cache_days_title
+            initialSelection = 7
+        }
+        singleChoice(
+            Constants.PREF_MUSIC_CACHE_LIMIT_MB,
+            listOf(100, 250, 500, 1000, 2000, 5000).map { mb ->
+                SelectionItem(mb, Formatter.formatShortFileSize(requireContext(), mb * 1024L * 1024L))
+            },
+        ) {
+            titleRes = R.string.pref_music_cache_limit
+            summaryRes = R.string.pref_music_cache_limit_summary
+            initialSelection = 500
         }
         checkBox(Constants.PREF_MUSIC_NOTIFICATION_ALWAYS_DISMISSIBLE) {
             titleRes = R.string.pref_music_notification_always_dismissible_title
