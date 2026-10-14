@@ -55,7 +55,10 @@ class DownloadedMusicService : MediaSessionService() {
         val sessionActivity = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            // The notification opens the player in full
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_OPEN_NOW_PLAYING)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 

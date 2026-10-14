@@ -23,6 +23,8 @@ import androidx.lifecycle.withStarted
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.jellyfin.mobile.downloads.DownloadManager
+import org.jellyfin.mobile.downloads.DownloadsFragment
+import org.jellyfin.mobile.ui.screens.music.NowPlayingFragment
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.cast.Chromecast
 import org.jellyfin.mobile.player.cast.IChromecast
@@ -125,6 +127,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Opened from the music player's notification: the player in full, once the app's screen is there
+        openNowPlayingPending = intent?.action == ACTION_OPEN_NOW_PLAYING
+
         // Downloads interrupted by the system go on
         lifecycleScope.launch {
             runCatching { get<DownloadManager>().resumeInterrupted() }
@@ -152,6 +157,26 @@ class MainActivity : AppCompatActivity() {
         chromecast.initializePlugin(this)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_OPEN_NOW_PLAYING) {
+            openNowPlayingPending = true
+            openNowPlayingIfReady()
+        }
+    }
+
+    private var openNowPlayingPending = false
+
+    private fun openNowPlayingIfReady() {
+        if (!openNowPlayingPending) return
+        val current = supportFragmentManager.findFragmentById(R.id.fragment_container)
+        if (current is WebViewFragment || current is DownloadsFragment || current is NowPlayingFragment) {
+            openNowPlayingPending = false
+            NowPlayingFragment.open(supportFragmentManager)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         orientationListener.enable()
@@ -177,9 +202,16 @@ class MainActivity : AppCompatActivity() {
                             },
                         )
                     }
+                    executePendingTransactions()
+                    openNowPlayingIfReady()
                 }
             }
         }
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        openNowPlayingIfReady()
     }
 
     override fun onRequestPermissionsResult(
@@ -215,5 +247,10 @@ class MainActivity : AppCompatActivity() {
         unbindService(serviceConnection)
         chromecast.destroy()
         super.onDestroy()
+    }
+
+    companion object {
+        /** The music player's notification: open the player in full. */
+        const val ACTION_OPEN_NOW_PLAYING = "org.jellyfin.mobile.OPEN_NOW_PLAYING"
     }
 }

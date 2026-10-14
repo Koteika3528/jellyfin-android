@@ -102,8 +102,12 @@ private val Dim = Color(0x99FFFFFF)
 fun NowPlayingScreen(player: DownloadedMusicPlayer, onClose: () -> Unit) {
     val state = player.nowPlaying.collectAsState().value
     if (state == null) {
-        // Stopped meanwhile
-        LaunchedEffect(Unit) { onClose() }
+        // Nothing plays (stopped meanwhile), or the player is still connecting after a cold start
+        LaunchedEffect(Unit) {
+            delay(CONNECT_WAIT_MS)
+            if (player.nowPlaying.value == null) onClose()
+        }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
         return
     }
 
@@ -469,6 +473,7 @@ private fun ControlButton(icon: ImageVector, description: String, tint: Color, s
 private fun time(ms: Long): String = DateUtils.formatElapsedTime(ms.coerceAtLeast(0L) / MS_PER_SECOND)
 
 private const val POSITION_REFRESH_MS = 500L
+private const val CONNECT_WAIT_MS = 1_500L
 private const val MS_PER_SECOND = 1000L
 private const val ANIMATION_MS = 250
 private const val SLOP = 24f
