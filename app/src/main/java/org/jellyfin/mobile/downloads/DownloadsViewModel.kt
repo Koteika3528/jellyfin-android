@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.downloads
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -24,6 +26,7 @@ import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.interaction.PlayOptions
 import org.jellyfin.sdk.model.api.MediaType
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.component.inject
 
 class DownloadsViewModel : ViewModel(), KoinComponent {
@@ -137,6 +140,28 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         .getAllDownloadsWithFiles()
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+    /** Bumped when downloads were let onto mobile data, so [waitingForWifi] is worked out again. */
+    private val mobileDataAllowed = MutableStateFlow(0)
+
+    /** Queued downloads wait for Wi-Fi (the phone is on mobile data, the settings allow only Wi-Fi). */
+    val waitingForWifi: StateFlow<Boolean> = combine(
+        downloads,
+        NetworkState.meteredFlow(get<Context>()),
+        mobileDataAllowed,
+    ) { downloads, metered, _ ->
+        downloads.any { it.download.status == DownloadStatus.QUEUED } &&
+            downloads.none { it.download.status == DownloadStatus.DOWNLOADING } &&
+            downloadManager.blockedByWifiOnly(metered)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    /** Downloads waiting for Wi-Fi go over mobile data now ([always]: from now on, in the settings too). */
+    fun allowMobileData(always: Boolean) {
+        viewModelScope.launch {
+            downloadManager.allowMobileData(always)
+            mobileDataAllowed.value++
+        }
+    }
 
     private val _storageLocation = MutableStateFlow(storageManager.getStorageLocation())
     val storageLocation = _storageLocation.asStateFlow()

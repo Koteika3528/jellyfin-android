@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import de.Maxr1998.modernpreferences.Preference
 import de.Maxr1998.modernpreferences.PreferencesAdapter
 import de.Maxr1998.modernpreferences.helpers.categoryHeader
@@ -22,6 +23,7 @@ import de.Maxr1998.modernpreferences.helpers.pref
 import de.Maxr1998.modernpreferences.helpers.screen
 import de.Maxr1998.modernpreferences.helpers.singleChoice
 import de.Maxr1998.modernpreferences.preferences.CheckBoxPreference
+import de.Maxr1998.modernpreferences.preferences.choice.AbstractSingleChoiceDialogPreference
 import de.Maxr1998.modernpreferences.preferences.choice.SelectionItem
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.app.AppPreferences
@@ -40,6 +42,7 @@ import org.jellyfin.mobile.utils.applyWindowInsetsAsMargins
 import org.jellyfin.mobile.utils.extensions.requireMainActivity
 import org.jellyfin.mobile.utils.isPackageInstalled
 import org.jellyfin.mobile.utils.withThemedContext
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 class SettingsFragment : Fragment(), BackPressInterceptor {
@@ -47,6 +50,7 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
     private val appPreferences: AppPreferences by inject()
     private val storageManager: StorageManager by inject()
     private val activityEventHandler: ActivityEventHandler by inject()
+    private val downloadManager: DownloadManager by inject()
 
     private val storageLocationPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -318,6 +322,12 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
         singleChoice(Constants.PREF_DOWNLOAD_METHOD, downloadMethods) {
             titleRes = R.string.network_title
             initialSelection = DownloadMethod.DEFAULT.intValue
+            selectionChangeListener = AbstractSingleChoiceDialogPreference.OnSelectionChangeListener { _, selection ->
+                // Saved here (not after the listener), so the restarted downloads use it
+                DownloadMethod.fromInt(selection)?.let { appPreferences.downloadMethod = it }
+                lifecycleScope.launch { downloadManager.downloadMethodChanged() }
+                true
+            }
         }
 
         downloadLocationPreference = pref(Constants.PREF_STORAGE_LOCATION) {

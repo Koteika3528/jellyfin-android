@@ -79,6 +79,7 @@ fun DownloadsScreen(
     onOpenNowPlaying: () -> Unit = {},
 ) {
     val downloads by viewModel.downloads.collectAsState()
+    val waitingForWifi by viewModel.waitingForWifi.collectAsState()
     val storageLocation by viewModel.storageLocation.collectAsState()
     val storageLocationAccessible by viewModel.storageLocationAccessible.collectAsState()
     val nowPlaying by viewModel.nowPlaying.collectAsState()
@@ -409,6 +410,14 @@ fun DownloadsScreen(
                     )
                 }
 
+                if (waitingForWifi) {
+                    WaitingForWifiCard(
+                        onDownloadNow = { viewModel.allowMobileData(always = false) },
+                        onAlways = { viewModel.allowMobileData(always = true) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+
                 if (storageLocation == null) {
                     StorageLocationNotSetCard(
                         onFix = { storageLocationPicker.launch(null) },
@@ -496,6 +505,39 @@ fun OfflineCard(
         }
         TextButton(onClick = onRetry) {
             Text(text = stringResource(R.string.downloads_offline_retry))
+        }
+    }
+}
+
+/** Queued downloads wait for Wi-Fi: why nothing downloads, and how to download over mobile data. */
+@Composable
+fun WaitingForWifiCard(
+    onDownloadNow: () -> Unit,
+    onAlways: () -> Unit,
+    modifier: Modifier = Modifier,
+) = Card(
+    modifier = modifier.fillMaxWidth(),
+    elevation = 4.dp,
+    backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.15f),
+) {
+    Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+        Text(
+            text = stringResource(R.string.downloads_waiting_wifi_title),
+            style = MaterialTheme.typography.subtitle1,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = stringResource(R.string.downloads_waiting_wifi_description),
+            style = MaterialTheme.typography.body2,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Row(modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = onAlways) {
+                Text(text = stringResource(R.string.downloads_waiting_wifi_always))
+            }
+            TextButton(onClick = onDownloadNow) {
+                Text(text = stringResource(R.string.downloads_waiting_wifi_now))
+            }
         }
     }
 }

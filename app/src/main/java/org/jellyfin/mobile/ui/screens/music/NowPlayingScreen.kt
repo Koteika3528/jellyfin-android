@@ -275,22 +275,30 @@ fun NowPlayingScreen(
                 }
 
                 Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                    Text(
-                        text = state.title.orEmpty(),
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = state.subtitle.orEmpty(),
-                        color = Dim,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-                    )
+                    // Stop sits by the title, where Android's players keep their extra action
+                    Row(modifier = Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = state.title.orEmpty(),
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = state.subtitle.orEmpty(),
+                                color = Dim,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        PressButton(onClick = { player.stop() }, size = 44.dp) {
+                            Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.music_stop), tint = Dim, modifier = Modifier.size(24.dp))
+                        }
+                    }
                     SeekBar(position = position, duration = duration, onSeek = { target ->
                         player.seekTo(target)
                         position = target
@@ -379,7 +387,7 @@ private fun SeekBar(position: Long, duration: Long, onSeek: (Long) -> Unit) {
 @Composable
 private fun Controls(player: DownloadedMusicPlayer, state: DownloadedMusicPlayer.NowPlaying) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 28.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 40.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -409,11 +417,6 @@ private fun Controls(player: DownloadedMusicPlayer, state: DownloadedMusicPlayer
                     else -> Player.REPEAT_MODE_OFF
                 },
             )
-        }
-    }
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.Center) {
-        PressButton(onClick = { player.stop() }, size = 40.dp) {
-            Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.music_stop), tint = Dim, modifier = Modifier.size(22.dp))
         }
     }
 }

@@ -382,4 +382,9 @@
     <string name="music_download">Скачать</string>
     <string name="music_downloaded">Скачано</string>
     <string name="music_download_unavailable">Сейчас не скачать: нет связи с сервером</string>
+    <string name="downloads_waiting_wifi_title">Ждёт Wi‑Fi</string>
+    <string name="downloads_waiting_wifi_description">Загрузки разрешены только по Wi‑Fi, а телефон в мобильной сети.</string>
+    <string name="downloads_waiting_wifi_now">Скачать сейчас</string>
+    <string name="downloads_waiting_wifi_always">Всегда через мобильную сеть</string>
+    <string name="downloads_waiting_wifi_toast">Скачается по Wi‑Fi: загрузки разрешены только по нему (через мобильную сеть — в «Загрузках»).</string>
 </resources>

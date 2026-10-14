@@ -390,4 +390,9 @@
     <string name="music_download">Download</string>
     <string name="music_downloaded">Downloaded</string>
     <string name="music_download_unavailable">Cannot download now: no connection to the server</string>
+    <string name="downloads_waiting_wifi_title">Waiting for Wi‑Fi</string>
+    <string name="downloads_waiting_wifi_description">Downloads are set to use Wi‑Fi only, the phone is on mobile data.</string>
+    <string name="downloads_waiting_wifi_now">Download now</string>
+    <string name="downloads_waiting_wifi_always">Always over mobile data</string>
+    <string name="downloads_waiting_wifi_toast">Will download over Wi‑Fi: only it is allowed for downloads (see Downloads to use mobile data).</string>
 </resources>

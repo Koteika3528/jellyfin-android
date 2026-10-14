@@ -109,7 +109,28 @@ class DownloadManager(
             DownloadWorker.start(context, appPreferences)
         }
 
+        if (blockedByWifiOnly(metered = NetworkState.isMetered(context))) {
+            withContext(Dispatchers.Main) { Toast.makeText(context, R.string.downloads_waiting_wifi_toast, Toast.LENGTH_LONG).show() }
+        }
         warnAboutSpace()
+    }
+
+    /** Queued downloads wait for Wi-Fi: only it is allowed for them, and the phone is on mobile data. */
+    fun blockedByWifiOnly(metered: Boolean): Boolean =
+        metered && appPreferences.downloadMethod == DownloadMethod.WIFI_ONLY && !DownloadWorker.meteredAllowedOnce
+
+    /**
+     * The network for downloads was changed in the settings: the queued work keeps the network it was
+     * started with, so it is started again with the new one (otherwise it would wait for Wi-Fi on).
+     */
+    suspend fun downloadMethodChanged() = withContext(Dispatchers.IO) {
+        if (downloadDao.getQueuedDownloads().isNotEmpty()) DownloadWorker.start(context, appPreferences)
+    }
+
+    /** Downloads waiting for Wi-Fi start now over mobile data, [always] also from now on (the setting). */
+    suspend fun allowMobileData(always: Boolean) = withContext(Dispatchers.IO) {
+        if (always) appPreferences.downloadMethod = DownloadMethod.MOBILE_DATA else DownloadWorker.meteredAllowedOnce = true
+        if (downloadDao.getQueuedDownloads().isNotEmpty()) DownloadWorker.start(context, appPreferences)
     }
 
     /** The server's item with the edits made on the phone (which remember what the server says now). */

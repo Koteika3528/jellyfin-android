@@ -29,6 +29,13 @@ class DownloadWorker(
     companion object {
         private val tag = DownloadWorker::class.qualifiedName!!
 
+        /**
+         * "Download now over mobile data" with Wi-Fi only set: lasts until the queue is done (or the app is
+         * closed), downloads added meanwhile do not go back to waiting for Wi-Fi.
+         */
+        @Volatile
+        var meteredAllowedOnce: Boolean = false
+
         suspend fun start(context: Context, appPreferences: AppPreferences) {
             val request = OneTimeWorkRequestBuilder<DownloadWorker>().apply {
                 addTag(tag)
@@ -37,7 +44,9 @@ class DownloadWorker(
                 setBackoffCriteria(BackoffPolicy.LINEAR, RETRY_DELAY_SECONDS, TimeUnit.SECONDS)
                 setConstraints(
                     Constraints.Builder().apply {
-                        when (appPreferences.downloadMethod) {
+                        val method = appPreferences.downloadMethod
+                            .takeUnless { it == DownloadMethod.WIFI_ONLY && meteredAllowedOnce } ?: DownloadMethod.MOBILE_DATA
+                        when (method) {
                             DownloadMethod.WIFI_ONLY -> setRequiredNetworkType(NetworkType.UNMETERED)
                             DownloadMethod.MOBILE_DATA -> setRequiredNetworkType(NetworkType.NOT_ROAMING)
                             DownloadMethod.MOBILE_AND_ROAMING -> setRequiredNetworkType(NetworkType.CONNECTED)
@@ -77,7 +86,10 @@ class DownloadWorker(
 
     override suspend fun doWork(): Result {
         val canProcess = downloadQueue.prepare()
-        if (!canProcess) return Result.success()
+        if (!canProcess) {
+            meteredAllowedOnce = false
+            return Result.success()
+        }
 
         // Restarted by the system in the background (after the app was killed), Android 12+ may not let
         // the work become a foreground service: download on without it instead of failing the whole queue
@@ -90,6 +102,7 @@ class DownloadWorker(
         }
         return try {
             downloadQueue.process()
+            meteredAllowedOnce = false
             Result.success()
         } catch (e: CancellationException) {
             throw e

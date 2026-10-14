@@ -37,6 +37,7 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jellyfin.mobile.R
+import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.mobile.app.StorageManager
 import org.jellyfin.mobile.data.entity.DownloadEntity
 import org.jellyfin.mobile.data.entity.DownloadFiles
@@ -137,10 +138,14 @@ fun DownloadItem(
                     files.find { it.type == DownloadFileType.IMAGE_PRIMARY }?.uri
                 }
 
+                // Music: a note until its cover is downloaded
+                val placeholder = painterResource(
+                    if (download.item.mediaType == MediaType.AUDIO) R.drawable.ic_music_note_white_24dp else R.drawable.ic_local_movies_white_64,
+                )
                 AsyncImage(
                     model = uri,
-                    placeholder = painterResource(R.drawable.ic_local_movies_white_64),
-                    fallback = painterResource(R.drawable.ic_local_movies_white_64),
+                    placeholder = placeholder,
+                    fallback = placeholder,
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(
