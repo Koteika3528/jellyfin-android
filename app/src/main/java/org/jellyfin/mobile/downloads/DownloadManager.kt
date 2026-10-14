@@ -15,6 +15,8 @@ import org.jellyfin.mobile.data.entity.ServerEntity
 import org.jellyfin.mobile.data.entity.UserEntity
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import timber.log.Timber
@@ -71,7 +73,7 @@ class DownloadManager(
                 )
             }
 
-            for (fetched in response.items) {
+            for (fetched in withAlbumNames(response.items)) {
                 var downloadEntity = existingItems[fetched.id]
                 val previous = offlineStore.optionsOf(fetched.id)
                 val itemOptions = options[fetched.id] ?: previous
@@ -157,7 +159,7 @@ class DownloadManager(
             val items = runCatching {
                 api.itemsApi.getItems(ids = chunk.map { it.itemId }, fields = ITEM_FIELDS).content.items
             }.getOrNull() ?: return@withContext
-            val byId = items.associateBy { it.id }
+            val byId = withAlbumNames(items).associateBy { it.id }
             for (download in chunk) {
                 val fresh = byId[download.itemId] ?: continue
                 // A remuxed or transcoded file keeps the description of its own tracks
@@ -167,7 +169,27 @@ class DownloadManager(
         }
     }
 
-        /**
+    /**
+     * Tracks show their album as it is now: the album's own name and artists. A track keeps the ones of its
+     * file tags, also after the album was edited on the server (older servers do not pass the edit on).
+     */
+    private suspend fun withAlbumNames(items: List<BaseItemDto>): List<BaseItemDto> {
+        val albumIds = items.filter { it.type == BaseItemKind.AUDIO }.mapNotNull { it.albumId }.distinct()
+        if (albumIds.isEmpty()) return items
+        val albums = albumIds.chunked(ITEMS_BATCH).flatMap { chunk ->
+            runCatching { api.itemsApi.getItems(ids = chunk).content.items }.getOrNull().orEmpty()
+        }.associateBy { it.id }
+        return items.map { item ->
+            val album = item.albumId?.let(albums::get) ?: return@map item
+            item.copy(
+                album = album.name?.takeIf { it.isNotBlank() } ?: item.album,
+                albumArtist = album.albumArtist?.takeIf { it.isNotBlank() } ?: item.albumArtist,
+                albumArtists = album.albumArtists?.takeIf { it.isNotEmpty() } ?: item.albumArtists,
+            )
+        }
+    }
+
+    /**
      * Picks up downloads interrupted by the system (the app was killed, the work failed): they stay
      * "downloading" in the database with nothing running. Called when the app starts.
      */
