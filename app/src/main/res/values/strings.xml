@@ -351,4 +351,5 @@
     <string name="music_queue">Queue</string>
     <string name="pref_native_music_player_title">Play music in the app\'s player</string>
     <string name="pref_native_music_player_summary">Music from the web client plays in the app\'s own player: mini player, full screen, notification, downloaded tracks from the phone</string>
+    <string name="music_reverse">Reverse order</string>
 </resources>

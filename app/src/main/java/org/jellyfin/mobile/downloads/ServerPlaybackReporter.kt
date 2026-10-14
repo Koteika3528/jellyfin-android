@@ -52,6 +52,9 @@ class ServerPlaybackReporter(private val player: Player, private val api: ApiCli
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        // The same track after the queue changed (turned around): it plays on, nothing to report
+        val id = mediaItem?.mediaMetadata?.extras?.getString(StreamedMusic.EXTRA_ITEM_ID)
+        if (id != null && id == current?.itemId?.toString() && reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         stopped(lastPositionMs)
         lastPositionMs = 0L
         start(mediaItem)

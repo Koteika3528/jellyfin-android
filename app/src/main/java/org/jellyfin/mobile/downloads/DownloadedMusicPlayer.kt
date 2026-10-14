@@ -36,6 +36,8 @@ class DownloadedMusicPlayer(private val context: Context) {
         /** Position of the track in the queue, and the queue's length (changes when the queue changes). */
         val index: Int = 0,
         val count: Int = 0,
+        /** The queue plays from the end to the start. */
+        val reversed: Boolean = false,
     )
 
     data class QueueEntry(val title: String?, val subtitle: String?, val artworkUri: Uri?)
@@ -91,8 +93,12 @@ class DownloadedMusicPlayer(private val context: Context) {
     /** Shows what is already playing, e.g. after returning to the screen. */
     fun connect() = withController { }
 
+    /** Whether the queue was turned around ([setReversed]); a new queue starts in its own order. */
+    private var reversed = false
+
     fun play(items: List<MediaItem>, startIndex: Int, startPositionMs: Long = 0L) {
         if (items.isEmpty()) return
+        reversed = false
         withController { player ->
             player.setMediaItems(items, startIndex.coerceIn(items.indices), startPositionMs.coerceAtLeast(0L))
             player.prepare()
@@ -135,8 +141,31 @@ class DownloadedMusicPlayer(private val context: Context) {
         controller?.repeatMode = mode
     }
 
+    /** Shuffle and the reverse order exclude each other: shuffling turns the queue back. */
     fun setShuffle(enabled: Boolean) {
-        controller?.shuffleModeEnabled = enabled
+        val player = controller ?: return
+        if (enabled && reversed) setReversed(false)
+        player.shuffleModeEnabled = enabled
+    }
+
+    /**
+     * Plays the queue from the end to the start: the queue is turned around, the current track goes on
+     * where it was. Repeat works with it; shuffle is turned off.
+     */
+    fun setReversed(enabled: Boolean) {
+        val player = controller ?: return
+        if (enabled == reversed || player.mediaItemCount == 0) return
+        if (enabled && player.shuffleModeEnabled) player.shuffleModeEnabled = false
+        val count = player.mediaItemCount
+        val items = (0 until count).map { player.getMediaItemAt(it) }.reversed()
+        val index = count - 1 - player.currentMediaItemIndex
+        val position = player.currentPosition
+        val playing = player.playWhenReady
+        reversed = enabled
+        player.setMediaItems(items, index, position)
+        player.prepare()
+        player.playWhenReady = playing
+        update()
     }
 
     fun seekTo(positionMs: Long) {
@@ -219,6 +248,7 @@ class DownloadedMusicPlayer(private val context: Context) {
             shuffle = player.shuffleModeEnabled,
             index = player.currentMediaItemIndex,
             count = player.mediaItemCount,
+            reversed = reversed,
         )
     }
 

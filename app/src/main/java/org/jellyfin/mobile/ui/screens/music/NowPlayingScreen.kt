@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -84,7 +85,7 @@ fun NowPlayingScreen(player: DownloadedMusicPlayer, onClose: () -> Unit) {
         }
     }
 
-    val queue = remember(state.count, state.mediaId) { player.queue() }
+    val queue = remember(state.count, state.mediaId, state.reversed) { player.queue() }
     val listState = rememberLazyListState()
     LaunchedEffect(state.index) { if (state.index > 0) listState.animateScrollToItem((state.index - 1).coerceAtLeast(0)) }
 
@@ -163,11 +164,6 @@ fun NowPlayingScreen(player: DownloadedMusicPlayer, onClose: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ModeButton(
-                            icon = Icons.Filled.Shuffle,
-                            active = state.shuffle,
-                            description = stringResource(R.string.music_shuffle),
-                        ) { player.setShuffle(!state.shuffle) }
                         IconButton(onClick = { player.previous() }) {
                             Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.music_previous), modifier = Modifier.size(36.dp))
                         }
@@ -189,6 +185,24 @@ fun NowPlayingScreen(player: DownloadedMusicPlayer, onClose: () -> Unit) {
                         IconButton(onClick = { player.next() }, enabled = state.hasNext) {
                             Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.music_next), modifier = Modifier.size(36.dp))
                         }
+                    }
+
+                    // Modes: shuffle or reverse order (one excludes the other), each with repeat all / one
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ModeButton(
+                            icon = Icons.Filled.Shuffle,
+                            active = state.shuffle,
+                            description = stringResource(R.string.music_shuffle),
+                        ) { player.setShuffle(!state.shuffle) }
+                        ModeButton(
+                            icon = Icons.Filled.SwapVert,
+                            active = state.reversed,
+                            description = stringResource(R.string.music_reverse),
+                        ) { player.setReversed(!state.reversed) }
                         ModeButton(
                             icon = if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                             active = state.repeatMode != Player.REPEAT_MODE_OFF,
