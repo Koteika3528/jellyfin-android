@@ -362,4 +362,6 @@
         <item quantity="many">%d дней</item>
         <item quantity="other">%d дня</item>
     </plurals>
+    <string name="music_now_playing">Сейчас играет</string>
+    <string name="music_queue_hint">Свайп вправо — закрыть</string>
 </resources>

@@ -370,4 +370,6 @@
         <item quantity="one">%d day</item>
         <item quantity="other">%d days</item>
     </plurals>
+    <string name="music_now_playing">Now playing</string>
+    <string name="music_queue_hint">Swipe right to close</string>
 </resources>
