@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -86,6 +87,8 @@ fun DownloadsScreen(
     val selection = remember { mutableStateSetOf<Long>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    // Downloads whose details are being edited (on the phone)
+    var metadataTargets by remember { mutableStateOf<List<DownloadEntity>?>(null) }
 
     // Browsing like the web client: libraries, then albums, artists, genres or series, then their downloads
     val locations = remember {
@@ -175,6 +178,24 @@ fun DownloadsScreen(
 
     BackHandler(enabled = selectionMode) {
         selection.clear()
+    }
+
+    metadataTargets?.let { targets ->
+        MetadataDialog(
+            downloads = targets,
+            edited = viewModel.isEdited(targets),
+            onSave = { changes ->
+                viewModel.editMetadata(targets, changes)
+                metadataTargets = null
+                selection.clear()
+            },
+            onReset = {
+                viewModel.resetMetadata(targets)
+                metadataTargets = null
+                selection.clear()
+            },
+            onDismiss = { metadataTargets = null },
+        )
     }
 
     if (showDeleteConfirm) {
@@ -274,6 +295,17 @@ fun DownloadsScreen(
                             IconButton(onClick = { searchOpen = true }) {
                                 Icon(imageVector = Icons.Outlined.Search, contentDescription = stringResource(R.string.downloads_search))
                             }
+                            // An album: its details for all of its tracks
+                            if (location is BrowseLocation.Group && location.kind == GroupKind.ALBUM) {
+                                IconButton(onClick = {
+                                    metadataTargets = downloads.map { it.download }
+                                        .filter { it.item.mediaType == MediaType.AUDIO }
+                                        .filter { (it.item.albumId?.toString() ?: "name:" + it.item.album.orEmpty()) == location.key }
+                                        .ifEmpty { null }
+                                }) {
+                                    Icon(imageVector = Icons.Outlined.Edit, contentDescription = stringResource(R.string.metadata_edit))
+                                }
+                            }
                             if (location !is BrowseLocation.Storage) {
                                 IconButton(onClick = { locations.add(BrowseLocation.Storage) }) {
                                     Icon(imageVector = Icons.Outlined.Storage, contentDescription = stringResource(R.string.downloads_storage))
@@ -316,6 +348,14 @@ fun DownloadsScreen(
                                         }
 
                                         if (selection.isNotEmpty()) {
+                                            DropdownMenuItem(
+                                                onClick = {
+                                                    metadataTargets = downloads.map { it.download }.filter { it.id in selection }
+                                                    showMenu = false
+                                                },
+                                            ) {
+                                                Text(text = stringResource(R.string.metadata_edit))
+                                            }
                                             DropdownMenuItem(
                                                 onClick = {
                                                     selection.clear()

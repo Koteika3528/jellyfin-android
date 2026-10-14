@@ -364,4 +364,19 @@
     </plurals>
     <string name="music_now_playing">Сейчас играет</string>
     <string name="music_queue_hint">Свайп вправо — закрыть</string>
+    <string name="metadata_edit">Изменить сведения</string>
+    <string name="metadata_edit_title">Сведения</string>
+    <string name="metadata_edit_title_many">Сведения: %1$d</string>
+    <string name="metadata_edit_hint">Меняется только на этом телефоне, на сервере остаётся как было. Пустое поле не меняется.</string>
+    <string name="metadata_edit_differs">разные</string>
+    <string name="metadata_edit_reset">Как на сервере</string>
+    <string name="metadata_edit_cancel">Отмена</string>
+    <string name="metadata_edit_save">Сохранить</string>
+    <string name="metadata_field_name">Название</string>
+    <string name="metadata_field_artists">Исполнители (через запятую)</string>
+    <string name="metadata_field_album">Альбом</string>
+    <string name="metadata_field_album_artist">Исполнитель альбома</string>
+    <string name="metadata_field_track">Номер трека</string>
+    <string name="metadata_field_disc">Диск</string>
+    <string name="metadata_field_year">Год</string>
 </resources>

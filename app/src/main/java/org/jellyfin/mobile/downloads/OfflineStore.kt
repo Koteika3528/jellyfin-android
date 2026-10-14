@@ -64,6 +64,19 @@ class OfflineStore(context: Context) {
         _options.value = updated
     }
 
+    private val _overrides = MutableStateFlow(readOverrides())
+
+    /** Edits of downloads made on the phone, by item id (see [MetadataOverride]). */
+    fun overrideOf(itemId: UUID): MetadataOverride? = _overrides.value[itemId.toString()]
+
+    @Synchronized
+    fun setOverride(itemId: UUID, override: MetadataOverride?) {
+        val updated = if (override == null || override.edited.isEmpty) _overrides.value - itemId.toString() else _overrides.value + (itemId.toString() to override)
+        if (updated == _overrides.value) return
+        prefs.edit { putString(KEY_OVERRIDES, json.encodeToString(overridesSerializer, updated)) }
+        _overrides.value = updated
+    }
+
     /** What was last offered with "ask first", so the same offer does not come back on every start. */
     var lastOffer: String?
         get() = prefs.getString(KEY_LAST_OFFER, null)
@@ -82,12 +95,18 @@ class OfflineStore(context: Context) {
         prefs.getString(KEY_FAVORITES, null)?.let { json.decodeFromString(MapSerializer(String.serializer(), Boolean.serializer()), it) }
     }.getOrNull().orEmpty()
 
+    private fun readOverrides(): Map<String, MetadataOverride> = runCatching {
+        prefs.getString(KEY_OVERRIDES, null)?.let { json.decodeFromString(overridesSerializer, it) }
+    }.getOrNull().orEmpty()
+
     private fun readOptions(): Map<String, DownloadOptions> = runCatching {
         prefs.getString(KEY_OPTIONS, null)?.let { json.decodeFromString(optionsSerializer, it) }
     }.getOrNull().orEmpty()
 
     companion object {
         private const val KEY_OPTIONS = "download_options"
+        private const val KEY_OVERRIDES = "metadata_overrides"
+        private val overridesSerializer = MapSerializer(String.serializer(), MetadataOverride.serializer())
         private val optionsSerializer = MapSerializer(String.serializer(), DownloadOptions.serializer())
         private const val KEY_FOLLOWS = "follows"
         private const val KEY_FAVORITES = "favorites"

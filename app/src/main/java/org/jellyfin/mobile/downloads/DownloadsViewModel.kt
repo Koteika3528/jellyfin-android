@@ -68,6 +68,17 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
         if (followed) offlineMaintenance.runInBackground()
     }
 
+    /** Edits the details of downloads on the phone (the server is not changed). */
+    fun editMetadata(downloads: List<DownloadEntity>, changes: MetadataFields) {
+        viewModelScope.launch { downloadManager.editMetadata(downloads, changes) }
+    }
+
+    fun resetMetadata(downloads: List<DownloadEntity>) {
+        viewModelScope.launch { downloadManager.resetMetadata(downloads) }
+    }
+
+    fun isEdited(downloads: List<DownloadEntity>) = downloads.any { offlineStore.overrideOf(it.itemId) != null }
+
     /** Deletes the downloads chosen on the storage page, with their files. */
     fun deleteDownloads(downloads: List<DownloadEntity>) {
         viewModelScope.launch { downloads.forEach { downloadManager.delete(it.id, deleteFiles = true) } }

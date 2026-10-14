@@ -78,7 +78,7 @@ class DownloadManager(
                 val previous = offlineStore.optionsOf(fetched.id)
                 val itemOptions = options[fetched.id] ?: previous
                 // The stored item describes the file that is downloaded: only its tracks, numbered as in it
-                val item = fetched.copy(mediaSources = downloadedSources(fetched.mediaSources, itemOptions))
+                val item = withEdits(fetched.copy(mediaSources = downloadedSources(fetched.mediaSources, itemOptions)))
                 // Another way of downloading: the old file goes, the next one is made anew
                 if (downloadEntity != null && itemOptions != previous) removeMainFile(downloadEntity.id)
                 offlineStore.setOptions(fetched.id, itemOptions)
@@ -110,6 +110,42 @@ class DownloadManager(
         }
 
         warnAboutSpace()
+    }
+
+    /** The server's item with the edits made on the phone (which remember what the server says now). */
+    private fun withEdits(item: BaseItemDto): BaseItemDto {
+        val override = offlineStore.overrideOf(item.id) ?: return item
+        val updated = override.copy(original = MetadataFields.of(item))
+        offlineStore.setOverride(item.id, updated)
+        return updated.applyTo(item)
+    }
+
+    /**
+     * Edits [downloads] on the phone: the set fields of [changes] (several downloads - e.g. an album: the
+     * fields they share). The server is not changed.
+     */
+    suspend fun editMetadata(downloads: List<DownloadEntity>, changes: MetadataFields) = withContext(Dispatchers.IO) {
+        if (changes.isEmpty) return@withContext
+        for (download in downloads) {
+            val current = downloadDao.getDownload(download.id) ?: continue
+            val previous = offlineStore.overrideOf(current.itemId)
+            val original = previous?.original ?: MetadataFields.of(current.item)
+            val override = MetadataOverride(original, (previous?.edited ?: MetadataFields()).merge(changes))
+            offlineStore.setOverride(current.itemId, override)
+            downloadDao.update(current.copy(item = override.applyTo(previous?.restore(current.item) ?: current.item)))
+        }
+        offlineLibrary.scheduleWrite()
+    }
+
+    /** Back to what the server says (as it was last known, also without a connection). */
+    suspend fun resetMetadata(downloads: List<DownloadEntity>) = withContext(Dispatchers.IO) {
+        for (download in downloads) {
+            val current = downloadDao.getDownload(download.id) ?: continue
+            val override = offlineStore.overrideOf(current.itemId) ?: continue
+            offlineStore.setOverride(current.itemId, null)
+            downloadDao.update(current.copy(item = override.restore(current.item)))
+        }
+        offlineLibrary.scheduleWrite()
     }
 
     private fun downloadedSources(sources: List<MediaSourceInfo>?, options: DownloadOptions): List<MediaSourceInfo>? {
@@ -164,7 +200,7 @@ class DownloadManager(
                 val fresh = byId[download.itemId] ?: continue
                 // A remuxed or transcoded file keeps the description of its own tracks
                 val sources = if (offlineStore.optionsOf(download.itemId).isOriginal) fresh.mediaSources else download.item.mediaSources
-                downloadDao.update(download.copy(item = fresh.copy(genres = fresh.genres ?: emptyList(), mediaSources = sources)))
+                downloadDao.update(download.copy(item = withEdits(fresh.copy(genres = fresh.genres ?: emptyList(), mediaSources = sources))))
             }
         }
     }

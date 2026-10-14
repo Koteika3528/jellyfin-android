@@ -372,4 +372,19 @@
     </plurals>
     <string name="music_now_playing">Now playing</string>
     <string name="music_queue_hint">Swipe right to close</string>
+    <string name="metadata_edit">Edit details</string>
+    <string name="metadata_edit_title">Edit details</string>
+    <string name="metadata_edit_title_many">Edit details: %1$d</string>
+    <string name="metadata_edit_hint">Changed on this phone only, the server keeps its own. An empty field stays as it is.</string>
+    <string name="metadata_edit_differs">different</string>
+    <string name="metadata_edit_reset">As on the server</string>
+    <string name="metadata_edit_cancel">Cancel</string>
+    <string name="metadata_edit_save">Save</string>
+    <string name="metadata_field_name">Title</string>
+    <string name="metadata_field_artists">Artists (comma separated)</string>
+    <string name="metadata_field_album">Album</string>
+    <string name="metadata_field_album_artist">Album artist</string>
+    <string name="metadata_field_track">Track number</string>
+    <string name="metadata_field_disc">Disc</string>
+    <string name="metadata_field_year">Year</string>
 </resources>
