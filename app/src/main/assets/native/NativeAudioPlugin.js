@@ -41,11 +41,19 @@ export class NativeAudioPlugin {
         return this._native.isEnabled() && !this.playbackManager.syncPlayEnabled;
     }
 
+    // Only what the app's player needs: the web client's items carry its own objects too (some point back
+    // at each other and cannot be turned into JSON)
     static toTracks(items) {
+        const fields = [
+            'Id', 'ServerId', 'Type', 'MediaType', 'Name', 'Album', 'AlbumId', 'AlbumArtist', 'AlbumArtists',
+            'Artists', 'AlbumPrimaryImageTag', 'ImageTags', 'IndexNumber', 'ParentIndexNumber', 'RunTimeTicks',
+            'ProductionYear', 'Genres'
+        ];
         return (items || []).filter(item => item && item.Id).map(item => {
-            const track = Object.assign({}, item);
-            delete track.PresetMediaSource;
-            delete track.MediaSources;
+            const track = {};
+            for (const field of fields) {
+                if (item[field] !== undefined && item[field] !== null) track[field] = item[field];
+            }
             return track;
         });
     }
