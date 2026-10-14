@@ -387,4 +387,7 @@
     <string name="metadata_field_track">Track number</string>
     <string name="metadata_field_disc">Disc</string>
     <string name="metadata_field_year">Year</string>
+    <string name="music_download">Download</string>
+    <string name="music_downloaded">Downloaded</string>
+    <string name="music_download_unavailable">Cannot download now: no connection to the server</string>
 </resources>

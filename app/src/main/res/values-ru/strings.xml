@@ -379,4 +379,7 @@
     <string name="metadata_field_track">Номер трека</string>
     <string name="metadata_field_disc">Диск</string>
     <string name="metadata_field_year">Год</string>
+    <string name="music_download">Скачать</string>
+    <string name="music_downloaded">Скачано</string>
+    <string name="music_download_unavailable">Сейчас не скачать: нет связи с сервером</string>
 </resources>
