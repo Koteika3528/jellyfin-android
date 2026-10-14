@@ -24,7 +24,6 @@ import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.player.interaction.PlayOptions
 import org.jellyfin.sdk.model.api.MediaType
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.get
 import org.koin.core.component.inject
 
 class DownloadsViewModel : ViewModel(), KoinComponent {
@@ -36,7 +35,7 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
     private val offlineLibrary: OfflineLibrary by inject()
     private val offlinePlayback: OfflinePlayback by inject()
     private val offlineStore: OfflineStore by inject()
-    private val musicPlayer = DownloadedMusicPlayer(get())
+    private val musicPlayer: DownloadedMusicPlayer by inject()
 
     val nowPlaying: StateFlow<DownloadedMusicPlayer.NowPlaying?> = musicPlayer.nowPlaying
 
@@ -225,9 +224,6 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
 
     fun stopMusic() = musicPlayer.stop()
 
-    override fun onCleared() {
-        musicPlayer.release()
-    }
 
     fun download(download: DownloadEntity) {
         viewModelScope.launch {

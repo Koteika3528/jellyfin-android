@@ -75,6 +75,7 @@ fun DownloadsScreen(
     onRetryConnection: () -> Unit = {},
     startInStorage: Boolean = false,
     openCleanup: Boolean = false,
+    onOpenNowPlaying: () -> Unit = {},
 ) {
     val downloads by viewModel.downloads.collectAsState()
     val storageLocation by viewModel.storageLocation.collectAsState()
@@ -349,6 +350,7 @@ fun DownloadsScreen(
                         onPrevious = { viewModel.playPrevious() },
                         onNext = { viewModel.playNext() },
                         onStop = { viewModel.stopMusic() },
+                        onOpen = onOpenNowPlaying,
                     )
                 }
             }

@@ -31,6 +31,7 @@ object Constants {
     const val PREF_IGNORE_BLUETOOTH_PERMISSION = "pref_ignore_bluetooth_permission"
     const val PREF_DOWNLOAD_METHOD = "pref_download_method"
     const val PREF_MUSIC_NOTIFICATION_ALWAYS_DISMISSIBLE = "pref_music_notification_always_dismissible"
+    const val PREF_NATIVE_MUSIC_PLAYER = "pref_native_music_player"
     const val PREF_VIDEO_PLAYER_TYPE = "pref_video_player_type"
     const val PREF_EXOPLAYER_START_LANDSCAPE_VIDEO_IN_LANDSCAPE = "pref_exoplayer_start_landscape_video_in_landscape"
     const val PREF_EXOPLAYER_ALLOW_SWIPE_GESTURES = "pref_exoplayer_allow_swipe_gestures"

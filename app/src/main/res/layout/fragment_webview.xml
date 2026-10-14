@@ -42,4 +42,11 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="invisible" />
+
+    <!-- The app's music player (music from the web client plays there) -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/music_player"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

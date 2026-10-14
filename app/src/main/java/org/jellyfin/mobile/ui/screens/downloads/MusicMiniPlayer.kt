@@ -1,5 +1,6 @@
 package org.jellyfin.mobile.ui.screens.downloads
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,12 +44,16 @@ fun MusicMiniPlayer(
     modifier: Modifier = Modifier,
     favorite: Boolean? = null,
     onToggleFavorite: () -> Unit = {},
+    /** Tapping the track opens the player in full. */
+    onOpen: (() -> Unit)? = null,
 ) = Surface(
     modifier = modifier.fillMaxWidth(),
     elevation = 8.dp,
 ) {
     Row(
-        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier = Modifier
+            .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(

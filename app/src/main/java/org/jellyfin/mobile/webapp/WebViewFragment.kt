@@ -29,6 +29,7 @@ import org.jellyfin.mobile.app.AppPreferences
 import org.jellyfin.mobile.bridge.ExternalPlayer
 import org.jellyfin.mobile.bridge.MediaSegments
 import org.jellyfin.mobile.bridge.NativeInterface
+import org.jellyfin.mobile.bridge.NativeAudio
 import org.jellyfin.mobile.bridge.NativePlayer
 import org.jellyfin.mobile.data.entity.ServerEntity
 import org.jellyfin.mobile.databinding.FragmentWebviewBinding
@@ -50,7 +51,6 @@ import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.events.ActivityEvent
 import org.jellyfin.mobile.events.ActivityEventHandler
 import org.jellyfin.mobile.utils.applyDefault
-import org.jellyfin.mobile.utils.applyWindowInsetsAsMargins
 import org.jellyfin.mobile.utils.dip
 import org.jellyfin.mobile.utils.extensions.getParcelableCompat
 import org.jellyfin.mobile.utils.extensions.replaceFragment
@@ -59,6 +59,19 @@ import org.jellyfin.mobile.utils.isOutdated
 import org.jellyfin.mobile.utils.requestNoBatteryOptimizations
 import org.jellyfin.mobile.utils.runOnUiThread
 import org.koin.android.ext.android.inject
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import kotlinx.coroutines.delay
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.jellyfin.mobile.downloads.DownloadedMusicPlayer
+import org.jellyfin.mobile.ui.screens.downloads.MusicMiniPlayer
+import org.jellyfin.mobile.ui.screens.music.NowPlayingFragment
+import org.jellyfin.mobile.ui.utils.AppTheme
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 
 class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClient.FileChooserListener {
@@ -70,6 +83,8 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
     private val nativePlayer: NativePlayer by inject()
     private lateinit var externalPlayer: ExternalPlayer
     private val mediaSegments: MediaSegments by inject()
+    private val nativeAudio: NativeAudio by inject()
+    private val musicPlayer: DownloadedMusicPlayer by inject()
     private val activityEventHandler: ActivityEventHandler by inject()
     private val downloadDao: DownloadDao by inject()
     private val offlinePlayback: OfflinePlayback by inject()
@@ -142,8 +157,18 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         super.onViewCreated(view, savedInstanceState)
         val webView = webViewBinding!!.webView
 
-        // Apply window insets
-        webView.applyWindowInsetsAsMargins()
+        // Apply window insets; the mini player of the app's music player sits above the navigation bar
+        val musicPlayerView = webViewBinding!!.musicPlayer
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { _, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            systemBottomInset = insets.bottom
+            webView.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                setMargins(insets.left, insets.top, insets.right, systemBottomInset + miniPlayerHeight)
+            }
+            musicPlayerView.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = systemBottomInset }
+            windowInsets
+        }
+        setupMusicPlayer(webView, musicPlayerView)
 
         // Setup exclusion rects for gestures
         if (AndroidVersion.isAtLeastQ) {
@@ -198,6 +223,63 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         }
     }
 
+    private var systemBottomInset = 0
+    private var miniPlayerHeight = 0
+
+    /**
+     * Music from the web client plays in the app's player: its mini player over the web view (the web view
+     * ends above it), the full player on tap, and its state passed to the web client every second.
+     */
+    private fun setupMusicPlayer(webView: WebView, view: ComposeView) {
+        view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        view.setContent {
+            AppTheme {
+                val state = musicPlayer.nowPlaying.collectAsState().value
+                if (state != null) {
+                    MusicMiniPlayer(
+                        state = state,
+                        onTogglePlayPause = musicPlayer::togglePlayPause,
+                        onPrevious = musicPlayer::previous,
+                        onNext = musicPlayer::next,
+                        onStop = musicPlayer::stop,
+                        onOpen = { NowPlayingFragment.open(parentFragmentManager) },
+                    )
+                }
+            }
+        }
+        view.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
+            val height = if (musicPlayer.nowPlaying.value != null) bottom - top else 0
+            if (height != miniPlayerHeight) {
+                miniPlayerHeight = height
+                webView.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = systemBottomInset + miniPlayerHeight }
+            }
+        }
+        musicPlayer.connect()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            var wasPlaying = false
+            while (true) {
+                val state = musicPlayer.nowPlaying.value
+                // The app's player started: a video or audio playing in the web view stops
+                if (state?.isPlaying == true && !wasPlaying && connected) {
+                    webView.evaluateJavascript("window.NativeAudioPlugin && window.NativeAudioPlugin.stopWebPlayback();", null)
+                }
+                wasPlaying = state?.isPlaying == true
+                if (connected) {
+                    val json = buildJsonObject {
+                        put("active", state != null)
+                        put("playing", state?.isPlaying == true)
+                        put("itemId", state?.mediaId)
+                        put("positionMs", if (state != null) musicPlayer.positionMs() else 0L)
+                        put("durationMs", if (state != null) musicPlayer.durationMs() else 0L)
+                    }
+                    webView.evaluateJavascript("window.NativeAudioPlugin && window.NativeAudioPlugin.onNativeState($json);", null)
+                }
+                delay(MUSIC_STATE_INTERVAL_MS)
+            }
+        }
+    }
+
     override fun onInterceptBackPressed(): Boolean {
         return connected && webappFunctionChannel.goBack()
     }
@@ -219,6 +301,7 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         addJavascriptInterface(nativePlayer, "NativePlayer")
         addJavascriptInterface(externalPlayer, "ExternalPlayer")
         addJavascriptInterface(mediaSegments, "MediaSegments")
+        addJavascriptInterface(nativeAudio, "NativeAudio")
 
         // "Mobile data" of the app settings: ask (default), always, or Wi-Fi only
         val policy = appPreferences.mobileDataPolicy
@@ -324,3 +407,5 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         fileChooserActivityLauncher.launch(intent)
     }
 }
+
+private const val MUSIC_STATE_INTERVAL_MS = 1_000L

@@ -29,7 +29,10 @@ import okhttp3.OkHttpClient
 import org.jellyfin.mobile.MainViewModel
 import org.jellyfin.mobile.bridge.MediaSegments
 import org.jellyfin.mobile.bridge.NativePlayer
+import org.jellyfin.mobile.bridge.NativeAudio
 import org.jellyfin.mobile.downloads.DownloadManager
+import org.jellyfin.mobile.downloads.DownloadedMusicPlayer
+import org.jellyfin.mobile.downloads.StreamedMusic
 import org.jellyfin.mobile.downloads.DownloadNotificationManager
 import org.jellyfin.mobile.downloads.DownloadOptionsViewModel
 import org.jellyfin.mobile.downloads.DownloadQueue
@@ -85,6 +88,10 @@ val applicationModule = module {
 
     // Bridge interfaces
     single { NativePlayer(get(), get(), get(named(PLAYER_EVENT_CHANNEL))) }
+    // One music player for the web client and the downloads (its service plays, this is the controller)
+    single { DownloadedMusicPlayer(androidApplication()) }
+    single { StreamedMusic(androidApplication(), get(), get(), get()) }
+    single { NativeAudio(get(), get(), get()) }
     single { MediaSegments(get()) }
 
     // ViewModels

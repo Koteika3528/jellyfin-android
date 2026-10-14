@@ -12,13 +12,18 @@ import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.jellyfin.mobile.MainActivity
+import org.jellyfin.sdk.api.client.ApiClient
+import org.koin.android.ext.android.inject
 
 /**
- * Plays downloaded music from local files, without the server and without the web UI.
+ * The app's music player: downloaded music from local files, and music from the web client streamed from
+ * the server (see [StreamedMusic]); the web view does not play music.
  * The queue is set by [DownloadedMusicPlayer]; the notification and lock screen controls come from media3.
  */
 class DownloadedMusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
+    private var reporter: ServerPlaybackReporter? = null
+    private val apiClient: ApiClient by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -36,6 +41,9 @@ class DownloadedMusicService : MediaSessionService() {
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+
+        // Music streamed from the server (web client) is reported there, as the web player did
+        reporter = ServerPlaybackReporter(player, apiClient)
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -61,6 +69,8 @@ class DownloadedMusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        reporter?.release()
+        reporter = null
         mediaSession?.run {
             player.release()
             release()

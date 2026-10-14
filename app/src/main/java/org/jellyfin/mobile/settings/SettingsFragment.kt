@@ -103,6 +103,11 @@ class SettingsFragment : Fragment(), BackPressInterceptor {
         categoryHeader(PREF_CATEGORY_MUSIC_PLAYER) {
             titleRes = R.string.pref_category_music_player
         }
+        checkBox(Constants.PREF_NATIVE_MUSIC_PLAYER) {
+            titleRes = R.string.pref_native_music_player_title
+            summaryRes = R.string.pref_native_music_player_summary
+            defaultValue = true
+        }
         checkBox(Constants.PREF_MUSIC_NOTIFICATION_ALWAYS_DISMISSIBLE) {
             titleRes = R.string.pref_music_notification_always_dismissible_title
             summaryRes = R.string.pref_music_notification_always_dismissible_summary_off

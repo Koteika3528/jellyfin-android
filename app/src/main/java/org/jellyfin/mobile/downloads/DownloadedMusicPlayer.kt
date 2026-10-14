@@ -30,7 +30,15 @@ class DownloadedMusicPlayer(private val context: Context) {
         val isPlaying: Boolean,
         val hasPrevious: Boolean,
         val hasNext: Boolean,
+        /** [Player.REPEAT_MODE_OFF], [Player.REPEAT_MODE_ALL] or [Player.REPEAT_MODE_ONE]. */
+        val repeatMode: Int = Player.REPEAT_MODE_OFF,
+        val shuffle: Boolean = false,
+        /** Position of the track in the queue, and the queue's length (changes when the queue changes). */
+        val index: Int = 0,
+        val count: Int = 0,
     )
+
+    data class QueueEntry(val title: String?, val subtitle: String?, val artworkUri: Uri?)
 
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
@@ -83,12 +91,73 @@ class DownloadedMusicPlayer(private val context: Context) {
     /** Shows what is already playing, e.g. after returning to the screen. */
     fun connect() = withController { }
 
-    fun play(items: List<MediaItem>, startIndex: Int) {
+    fun play(items: List<MediaItem>, startIndex: Int, startPositionMs: Long = 0L) {
         if (items.isEmpty()) return
         withController { player ->
-            player.setMediaItems(items, startIndex.coerceIn(items.indices), 0L)
+            player.setMediaItems(items, startIndex.coerceIn(items.indices), startPositionMs.coerceAtLeast(0L))
             player.prepare()
             player.play()
+        }
+    }
+
+    /** Adds to the queue: right after the current track ([next]) or at its end. */
+    fun add(items: List<MediaItem>, next: Boolean) {
+        if (items.isEmpty()) return
+        withController { player ->
+            if (player.mediaItemCount == 0) {
+                play(items, 0)
+                return@withController
+            }
+            if (next) player.addMediaItems(player.currentMediaItemIndex + 1, items) else player.addMediaItems(items)
+        }
+    }
+
+    fun playIndex(index: Int) {
+        val player = controller ?: return
+        if (index !in 0 until player.mediaItemCount) return
+        player.seekToDefaultPosition(index)
+        player.play()
+    }
+
+    fun pause() {
+        controller?.pause()
+    }
+
+    fun resume() {
+        controller?.run {
+            if (playbackState == Player.STATE_ENDED) seekToDefaultPosition(0)
+            prepare()
+            play()
+        }
+    }
+
+    fun setRepeatMode(mode: Int) {
+        controller?.repeatMode = mode
+    }
+
+    fun setShuffle(enabled: Boolean) {
+        controller?.shuffleModeEnabled = enabled
+    }
+
+    fun seekTo(positionMs: Long) {
+        controller?.seekTo(positionMs.coerceAtLeast(0L))
+    }
+
+    /** Where the current track is, and how long it is (0 when unknown); read on demand, not in [nowPlaying]. */
+    fun positionMs(): Long = controller?.currentPosition ?: 0L
+
+    fun durationMs(): Long = controller?.duration?.takeIf { it > 0 } ?: 0L
+
+    /** The queue in its order (not the shuffled one), for the now playing screen. */
+    fun queue(): List<QueueEntry> {
+        val player = controller ?: return emptyList()
+        return (0 until player.mediaItemCount).map { index ->
+            val metadata = player.getMediaItemAt(index).mediaMetadata
+            QueueEntry(
+                title = metadata.title?.toString(),
+                subtitle = listOfNotNull(metadata.artist, metadata.albumTitle).map(CharSequence::toString).filter(String::isNotBlank).distinct().joinToString(" — ").ifEmpty { null },
+                artworkUri = metadata.artworkUri,
+            )
         }
     }
 
@@ -146,6 +215,10 @@ class DownloadedMusicPlayer(private val context: Context) {
             isPlaying = player.isPlaying || player.playWhenReady && player.playbackState == Player.STATE_BUFFERING,
             hasPrevious = player.mediaItemCount > 0,
             hasNext = player.hasNextMediaItem(),
+            repeatMode = player.repeatMode,
+            shuffle = player.shuffleModeEnabled,
+            index = player.currentMediaItemIndex,
+            count = player.mediaItemCount,
         )
     }
 

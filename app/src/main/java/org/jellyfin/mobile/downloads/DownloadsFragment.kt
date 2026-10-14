@@ -8,6 +8,7 @@ import org.jellyfin.mobile.MainViewModel
 import org.jellyfin.mobile.ui.ComposeFragment
 import org.jellyfin.mobile.ui.screens.downloads.DownloadsScreen
 import org.jellyfin.mobile.ui.screens.downloads.OfflineReason
+import org.jellyfin.mobile.ui.screens.music.NowPlayingFragment
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 
 class DownloadsFragment : ComposeFragment() {
@@ -32,6 +33,7 @@ class DownloadsFragment : ComposeFragment() {
             onRetryConnection = { retryConnection() },
             startInStorage = args?.getBoolean(EXTRA_STORAGE) == true,
             openCleanup = args?.getBoolean(EXTRA_CLEANUP) == true,
+            onOpenNowPlaying = { NowPlayingFragment.open(parentFragmentManager) },
         )
     }
 

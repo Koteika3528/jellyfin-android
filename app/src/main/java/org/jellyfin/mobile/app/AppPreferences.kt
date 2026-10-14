@@ -102,6 +102,10 @@ class AppPreferences(context: Context) {
         set(value) = sharedPreferences.edit { putInt(Constants.PREF_MOBILE_DATA_POLICY, value.intValue) }
 
     /** Streaming bitrate cap on mobile data for the integrated player, in bit/s; 0 - no cap. */
+    /** Music from the web client plays in the app's own player (not in the web view). */
+    val nativeMusicPlayer: Boolean
+        get() = sharedPreferences.getBoolean(Constants.PREF_NATIVE_MUSIC_PLAYER, true)
+
     val meteredMaxBitrate: Int
         get() = sharedPreferences.getInt(Constants.PREF_METERED_MAX_BITRATE, 0)
 
