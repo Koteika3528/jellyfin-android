@@ -41,6 +41,8 @@ class DownloadedMusicPlayer(private val context: Context) {
         val count: Int = 0,
         /** The queue plays from the end to the start. */
         val reversed: Boolean = false,
+        val artist: String? = null,
+        val album: String? = null,
     )
 
     data class QueueEntry(val title: String?, val subtitle: String?, val artworkUri: Uri?)
@@ -296,6 +298,8 @@ class DownloadedMusicPlayer(private val context: Context) {
             index = player.currentMediaItemIndex,
             count = player.mediaItemCount,
             reversed = reversed,
+            artist = metadata.artist?.toString()?.takeIf(String::isNotBlank),
+            album = metadata.albumTitle?.toString()?.takeIf(String::isNotBlank),
         )
     }
 

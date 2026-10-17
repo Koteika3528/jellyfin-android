@@ -74,6 +74,12 @@ class TrackServerActions(private val api: ApiClient, private val okHttpClient: O
         TimedLink("${baseUrl()}/Audio/$itemId/stream?static=true&ApiKey=${Uri.encode(token)}", session.expiresAt)
     }
 
+    /** Marks or unmarks the track as a favorite on the server. */
+    suspend fun setFavorite(itemId: UUID, favorite: Boolean) = withContext(Dispatchers.IO) {
+        if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId) else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
+        Unit
+    }
+
     /** The track as the server has it, with everything an update has to send back. */
     suspend fun item(itemId: UUID): BaseItemDto = withContext(Dispatchers.IO) {
         api.userLibraryApi.getItem(itemId).content

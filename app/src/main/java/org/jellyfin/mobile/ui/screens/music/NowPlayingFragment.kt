@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadStatus
 import org.jellyfin.mobile.downloads.DownloadedMusicPlayer
 import org.jellyfin.mobile.downloads.MetadataFields
+import org.jellyfin.mobile.downloads.OfflinePlayback
 import org.jellyfin.mobile.downloads.OfflineStore
 import org.jellyfin.mobile.downloads.ServerAccess
 import org.jellyfin.mobile.downloads.TrackServerActions
@@ -50,6 +52,7 @@ class NowPlayingFragment : ComposeFragment() {
     private val downloadDao: DownloadDao by inject()
     private val downloadManager: DownloadManager by inject()
     private val offlineStore: OfflineStore by inject()
+    private val offlinePlayback: OfflinePlayback by inject()
     private val apiClient: ApiClient by inject()
     private val okHttpClient: OkHttpClient by inject()
     private val serverActions by lazy { TrackServerActions(apiClient, okHttpClient) }
@@ -66,6 +69,9 @@ class NowPlayingFragment : ComposeFragment() {
 
     private val editing = MutableStateFlow<Editing?>(null)
 
+    /** Whether a streamed track is a favorite, as the server says (track id to it). */
+    private val serverFavorite = MutableStateFlow<Pair<String, Boolean>?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Opened from the notification right after a cold start: the player is not connected yet
@@ -76,6 +82,17 @@ class NowPlayingFragment : ComposeFragment() {
     override fun Content() {
         val downloads by remember { downloadDao.getAllDownloads() }.collectAsState(initial = emptyList())
         val access by serverAccess.collectAsState()
+        val pendingFavorites by offlineStore.pendingFavorites.collectAsState()
+        val nowPlaying by musicPlayer.nowPlaying.collectAsState()
+        val mediaId = nowPlaying?.mediaId
+        val download = downloads.firstOrNull { it.itemId.toString() == mediaId }?.takeIf { it.status == DownloadStatus.DOWNLOADED }
+        LaunchedEffect(mediaId, download == null) {
+            if (mediaId != null && download == null) loadServerFavorite(mediaId)
+        }
+        val favorite = when {
+            download != null -> offlinePlayback.isFavorite(download, pendingFavorites)
+            else -> serverFavorite.collectAsState().value?.takeIf { it.first == mediaId }?.second
+        }
         NowPlayingScreen(
             player = musicPlayer,
             onClose = ::close,
@@ -86,6 +103,12 @@ class NowPlayingFragment : ComposeFragment() {
             onShare = ::share,
             onCopyStreamLink = ::copyStreamLink,
             onEdit = { itemId, onServer -> if (onServer) editOnServer(itemId) else editOnPhone(itemId) },
+            favorite = favorite,
+            onToggleFavorite = {
+                if (mediaId != null && favorite != null) {
+                    if (download != null) offlinePlayback.setFavorite(download.itemId, !favorite) else setServerFavorite(mediaId, !favorite)
+                }
+            },
         )
 
         when (val target = editing.collectAsState().value) {
@@ -107,6 +130,30 @@ class NowPlayingFragment : ComposeFragment() {
                 albumEditable = false,
             )
             null -> Unit
+        }
+    }
+
+    private suspend fun loadServerFavorite(itemId: String) {
+        val id = itemId.toUUIDOrNull() ?: return
+        // Unknown without a connection: no heart then
+        val favorite = runCatching { serverActions.item(id).userData?.isFavorite }.getOrNull() ?: return
+        serverFavorite.value = itemId to favorite
+    }
+
+    /** Shown at once, put back when the server refuses. */
+    private fun setServerFavorite(itemId: String, favorite: Boolean) {
+        val id = itemId.toUUIDOrNull() ?: return
+        serverFavorite.value = itemId to favorite
+        lifecycleScope.launch {
+            try {
+                serverActions.setFavorite(id, favorite)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "Changing the favorite failed")
+                if (serverFavorite.value?.first == itemId) serverFavorite.value = itemId to !favorite
+                context?.let { Toast.makeText(it, R.string.music_favorite_failed, Toast.LENGTH_SHORT).show() }
+            }
         }
     }
 

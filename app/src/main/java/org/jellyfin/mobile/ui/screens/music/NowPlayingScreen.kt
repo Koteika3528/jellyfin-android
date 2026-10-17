@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
@@ -42,7 +44,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -134,6 +135,7 @@ private val PanelColor = Color(0xF21C1B1F)
  * behind "more", a sheet from the bottom.
  *
  * @param downloadStatus the download of the current track, null when it is not downloaded.
+ * @param favorite whether the track is a favorite, null while unknown (no heart then).
  * @param serverAccess whether the server answers and lets the user edit, null while it is asked
  * ([onMenuOpened] asks it again).
  */
@@ -148,6 +150,8 @@ fun NowPlayingScreen(
     onShare: (String) -> Unit = {},
     onCopyStreamLink: (String) -> Unit = {},
     onEdit: (itemId: String, onServer: Boolean) -> Unit = { _, _ -> },
+    favorite: Boolean? = null,
+    onToggleFavorite: () -> Unit = {},
 ) {
     val state = player.nowPlaying.collectAsState().value
     if (state == null) {
@@ -258,23 +262,41 @@ fun NowPlayingScreen(
                     .offset { IntOffset(0, (contentOffsetY.value * DRAG_RESISTANCE).roundToInt()) }
                     .graphicsLayer { alpha = 1f - (contentOffsetY.value / (closeDistance * 4)).coerceIn(0f, 0.5f) },
             ) {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Spotify's layout: where it plays from on top, a cover with room around it, the title with the
+                // heart, the seek bar, the controls, and a row of small actions at the bottom
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     PressButton(onClick = onClose) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Color.White) }
-                    Text(
-                        text = stringResource(R.string.music_now_playing),
-                        color = Color(0xCCFFFFFF),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(if (state.album != null) R.string.music_playing_from_album else R.string.music_now_playing).uppercase(),
+                            color = Dim,
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp,
+                            maxLines = 1,
+                        )
+                        if (state.album != null) {
+                            Text(
+                                text = state.album,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
                     PressButton(onClick = { openMenu() }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.music_more), tint = Color.White)
                     }
                 }
 
-                // Not edge to edge: room around the cover, it still fills the height on short screens
-                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = COVER_MARGIN, vertical = 16.dp), contentAlignment = Alignment.Center) {
+                // The side is worked out, so the cover never spills over its margins on any screen
+                BoxWithConstraints(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = COVER_MARGIN, vertical = 20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val side = minOf(maxWidth, maxHeight)
                     // The cover shrinks a little while paused, as in Android's media players
                     val coverScale by animateFloatAsState(if (state.isPlaying) 1f else PAUSED_COVER_SCALE, tween(ANIMATION_MS * 2), label = "cover")
                     AsyncImage(
@@ -285,35 +307,42 @@ fun NowPlayingScreen(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                            .size(side)
                             .graphicsLayer {
                                 scaleX = coverScale
                                 scaleY = coverScale
                             }
-                            .shadow(20.dp, RoundedCornerShape(20.dp))
-                            .clip(RoundedCornerShape(20.dp))
+                            .shadow(24.dp, RoundedCornerShape(COVER_CORNER))
+                            .clip(RoundedCornerShape(COVER_CORNER))
                             .background(Color(0xFF1A1A1A)),
                     )
                 }
 
                 Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                    Text(
-                        text = state.title.orEmpty(),
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = state.subtitle.orEmpty(),
-                        color = Dim,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = state.title.orEmpty(),
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = state.artist ?: state.subtitle.orEmpty(),
+                                color = Dim,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                        if (favorite != null) {
+                            FavoriteButton(favorite = favorite, onClick = onToggleFavorite)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
                     SeekBar(position = position, duration = duration, onSeek = { target ->
                         player.seekTo(target)
                         position = target
@@ -321,6 +350,33 @@ fun NowPlayingScreen(
                 }
 
                 Controls(player, state)
+
+                // Small actions, as Spotify keeps them under the controls
+                val download = downloadStatus(state.mediaId)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PressButton(onClick = { state.mediaId?.let(onDownload) }, size = 44.dp, enabled = download == null || download == DownloadStatus.ERROR) {
+                        Icon(
+                            imageVector = if (download == DownloadStatus.DOWNLOADED) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                            contentDescription = stringResource(if (download == DownloadStatus.DOWNLOADED) R.string.music_downloaded else R.string.music_download),
+                            tint = when (download) {
+                                DownloadStatus.DOWNLOADED -> Accent
+                                null, DownloadStatus.ERROR -> Dim
+                                else -> Color(0x4DFFFFFF)
+                            },
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    PressButton(onClick = { state.mediaId?.let(onShare) }, size = 44.dp) {
+                        Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.music_share), tint = Dim, modifier = Modifier.size(20.dp))
+                    }
+                    PressButton(onClick = { showQueue(true) }, size = 44.dp) {
+                        Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = stringResource(R.string.music_queue), tint = Dim, modifier = Modifier.size(22.dp))
+                    }
+                }
             }
 
             val openShare = 1f - panelOffset.value / panelWidth
@@ -627,21 +683,21 @@ private fun SeekBar(position: Long, duration: Long, onSeek: (Long) -> Unit) {
             val stroke = track.toPx()
             drawLine(Color(0x40FFFFFF), Offset(0f, y), Offset(size.width, y), strokeWidth = stroke, cap = StrokeCap.Round)
             if (fraction > 0f) {
-                drawLine(Accent, Offset(0f, y), Offset(size.width * fraction, y), strokeWidth = stroke, cap = StrokeCap.Round)
+                drawLine(Color.White, Offset(0f, y), Offset(size.width * fraction, y), strokeWidth = stroke, cap = StrokeCap.Round)
             }
             if (enabled) drawCircle(Color.White, radius = thumb.toPx(), center = Offset(size.width * fraction, y))
         }
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(time(if (dragging) (dragFraction * duration).toLong() else position), color = Dim, fontSize = 12.sp)
-        Text(if (enabled) "-" + time(duration - (if (dragging) (dragFraction * duration).toLong() else position)) else "", color = Dim, fontSize = 12.sp)
+        Text(if (enabled) time(duration) else "", color = Dim, fontSize = 12.sp)
     }
 }
 
 @Composable
 private fun Controls(player: DownloadedMusicPlayer, state: DownloadedMusicPlayer.NowPlaying) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 40.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -675,22 +731,21 @@ private fun Controls(player: DownloadedMusicPlayer, state: DownloadedMusicPlayer
     }
 }
 
-/** Round while paused, a rounded square while playing (Android's media controls do the same). */
+/** Spotify's play button: a white circle with a dark icon, it sinks a little under the finger. */
 @Composable
 private fun PlayButton(playing: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val corner by animateDpAsState(if (playing) 24.dp else 36.dp, tween(ANIMATION_MS), label = "corner")
     val scale by animateFloatAsState(if (pressed) PRESSED_SCALE else 1f, tween(PRESS_MS), label = "scale")
     Box(
         modifier = Modifier
-            .size(72.dp)
+            .size(68.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(corner))
-            .background(Accent)
+            .clip(CircleShape)
+            .background(Color.White)
             .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -698,10 +753,35 @@ private fun PlayButton(playing: Boolean, onClick: () -> Unit) {
             Icon(
                 imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = stringResource(if (isPlaying) R.string.music_pause else R.string.music_play),
-                tint = Color.White,
-                modifier = Modifier.size(36.dp),
+                tint = Color(0xFF121212),
+                modifier = Modifier.size(38.dp),
             )
         }
+    }
+}
+
+/** The heart by the title; it pops when tapped. */
+@Composable
+private fun FavoriteButton(favorite: Boolean, onClick: () -> Unit) {
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(favorite) {
+        if (favorite) {
+            pop.snapTo(FAVORITE_POP)
+            pop.animateTo(1f, tween(ANIMATION_MS * 2, easing = FastOutSlowInEasing))
+        }
+    }
+    PressButton(onClick = onClick) {
+        Icon(
+            imageVector = if (favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            contentDescription = stringResource(R.string.music_favorite),
+            tint = if (favorite) Accent else Color.White,
+            modifier = Modifier
+                .size(26.dp)
+                .graphicsLayer {
+                    scaleX = pop.value
+                    scaleY = pop.value
+                },
+        )
     }
 }
 
@@ -850,9 +930,11 @@ private const val CONNECT_WAIT_MS = 1_500L
 private const val MS_PER_SECOND = 1000L
 private const val MS_PER_MINUTE = 60_000L
 private const val DISABLED_ALPHA = 0.45f
+private const val FAVORITE_POP = 1.25f
 private val SLEEP_CHOICES = listOf(15, 30, 45, 60)
 private val SHEET_MAX_WIDTH = 560.dp
-private val COVER_MARGIN = 52.dp
+private val COVER_MARGIN = 48.dp
+private val COVER_CORNER = 8.dp
 private const val ANIMATION_MS = 180
 private const val PRESS_MS = 90
 private const val PRESSED_SCALE = 0.88f

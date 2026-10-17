@@ -408,4 +408,7 @@
     <string name="music_share_title">Поделиться треком</string>
     <string name="music_link_failed">Не удалось сделать ссылку</string>
     <string name="music_stream_link_copied">Ссылка на поток скопирована. Работает до %1$s</string>
+    <string name="music_playing_from_album">Из альбома</string>
+    <string name="music_favorite">Любимое</string>
+    <string name="music_favorite_failed">Не удалось изменить «Любимое»: нет связи с сервером</string>
 </resources>

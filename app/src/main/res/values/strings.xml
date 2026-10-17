@@ -416,4 +416,7 @@
     <string name="music_share_title">Share the track</string>
     <string name="music_link_failed">Making the link failed</string>
     <string name="music_stream_link_copied">Stream link copied. Works until %1$s</string>
+    <string name="music_playing_from_album">Playing from album</string>
+    <string name="music_favorite">Favorite</string>
+    <string name="music_favorite_failed">Changing the favorite failed: the server is not reachable</string>
 </resources>
