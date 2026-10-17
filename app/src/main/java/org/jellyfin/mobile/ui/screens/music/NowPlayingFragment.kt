@@ -2,6 +2,7 @@ package org.jellyfin.mobile.ui.screens.music
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentResolver
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
@@ -12,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.core.content.FileProvider
 import androidx.core.content.getSystemService
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
@@ -25,6 +27,7 @@ import org.jellyfin.mobile.MainActivity
 import org.jellyfin.mobile.R
 import org.jellyfin.mobile.data.dao.DownloadDao
 import org.jellyfin.mobile.data.entity.DownloadEntity
+import org.jellyfin.mobile.downloads.DownloadFileType
 import org.jellyfin.mobile.downloads.DownloadManager
 import org.jellyfin.mobile.downloads.DownloadStatus
 import org.jellyfin.mobile.downloads.DownloadedMusicPlayer
@@ -35,12 +38,14 @@ import org.jellyfin.mobile.downloads.ServerAccess
 import org.jellyfin.mobile.downloads.TrackServerActions
 import org.jellyfin.mobile.ui.ComposeFragment
 import org.jellyfin.mobile.ui.screens.downloads.MetadataDialog
+import org.jellyfin.mobile.utils.extensions.ScreenAnimation
 import org.jellyfin.mobile.utils.extensions.addFragment
 import org.jellyfin.mobile.utils.requestDownload
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.koin.android.ext.android.inject
 import timber.log.Timber
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -100,7 +105,8 @@ class NowPlayingFragment : ComposeFragment() {
             onDownload = ::download,
             serverAccess = access,
             onMenuOpened = ::refreshAccess,
-            onShare = ::share,
+            onShare = ::shareFile,
+            onShareLink = ::share,
             onCopyStreamLink = ::copyStreamLink,
             onEdit = { itemId, onServer -> if (onServer) editOnServer(itemId) else editOnPhone(itemId) },
             favorite = favorite,
@@ -183,6 +189,35 @@ class NowPlayingFragment : ComposeFragment() {
                 Timber.e(e, "Downloading the current track failed")
                 Toast.makeText(activity, R.string.music_download_unavailable, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    /**
+     * The track's file, sent with Android's share sheet: the downloaded one as it is, otherwise the original
+     * fetched from the server into the cache first.
+     */
+    private fun shareFile(itemId: String) {
+        val id = itemId.toUUIDOrNull() ?: return
+        val context = requireContext().applicationContext
+        launchWithToast(R.string.music_share_file_failed) {
+            val local = withContext(Dispatchers.IO) {
+                downloadDao.getDownloadsByItemIds(listOf(id))
+                    .firstOrNull { it.status == DownloadStatus.DOWNLOADED }
+                    ?.let { download -> downloadDao.getFiles(download.id).firstOrNull { it.type == DownloadFileType.ITEM }?.uri }
+            }
+            val uri = local?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT } ?: run {
+                Toast.makeText(context, R.string.music_share_preparing, Toast.LENGTH_SHORT).show()
+                val file = serverActions.fetchFile(id, File(context.cacheDir, SHARED_DIRECTORY))
+                FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            }
+            val type = context.contentResolver.getType(uri) ?: "audio/*"
+            val intent = Intent(Intent.ACTION_SEND)
+                .setType(type)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // Also as clip data: the chosen app gets the read permission through it
+            intent.clipData = ClipData.newRawUri(null, uri)
+            startActivity(Intent.createChooser(intent, getString(R.string.music_share_title)))
         }
     }
 
@@ -294,12 +329,13 @@ class NowPlayingFragment : ComposeFragment() {
 
     companion object {
         private const val ACCESS_KEPT_MS = 60_000L
+        private const val SHARED_DIRECTORY = "shared"
         private const val UTC_DATE_LENGTH = 19
 
         fun open(fragmentManager: FragmentManager) {
             if (fragmentManager.isStateSaved) return
             if (fragmentManager.fragments.any { it is NowPlayingFragment }) return
-            fragmentManager.addFragment<NowPlayingFragment>()
+            fragmentManager.addFragment<NowPlayingFragment>(animation = ScreenAnimation.SHEET)
         }
     }
 }

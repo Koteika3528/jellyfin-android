@@ -112,6 +112,17 @@
 
         <receiver android:name="org.jellyfin.mobile.downloads.DownloadBroadcastReceiver" />
 
+        <!-- Tracks fetched to be sent with "Share" (cache/shared), handed to the chosen app only -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
+
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />

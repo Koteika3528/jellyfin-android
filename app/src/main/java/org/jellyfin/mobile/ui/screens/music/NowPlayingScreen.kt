@@ -129,7 +129,8 @@ private val PanelColor = Color(0xF21C1B1F)
 /**
  * The app's music player in full: the cover blurred over the whole screen, the cover, title and artist, a seek
  * bar and the controls in Android's own style, with press animations; the queue is a side sheet. Short swipes
- * (or a quick flick) do it: down closes the player, left or up opens the queue, right or down closes it.
+ * (or a quick flick) do it: down closes the player, left opens the queue, right or down closes it. Nothing
+ * opens with a swipe up, so the player can grow downwards later.
  *
  * Everything else (the queue, reverse order, a sleep timer, downloading, sharing, the details) is in the menu
  * behind "more", a sheet from the bottom.
@@ -148,6 +149,7 @@ fun NowPlayingScreen(
     serverAccess: ServerAccess? = null,
     onMenuOpened: () -> Unit = {},
     onShare: (String) -> Unit = {},
+    onShareLink: (String) -> Unit = {},
     onCopyStreamLink: (String) -> Unit = {},
     onEdit: (itemId: String, onServer: Boolean) -> Unit = { _, _ -> },
     favorite: Boolean? = null,
@@ -231,7 +233,6 @@ fun NowPlayingScreen(
                                     panelOffset.animateTo(if (show) 0f else panelWidth, tween(ANIMATION_MS, easing = FastOutSlowInEasing))
                                 } else if (vertical == true) {
                                     when {
-                                        totalY < -closeDistance / 2 || speed.y < -fling -> showQueue(true)
                                         totalY > closeDistance || speed.y > fling && totalY > 0 -> onClose()
                                     }
                                 }
@@ -415,6 +416,7 @@ fun NowPlayingScreen(
             },
             onDownload = { state.mediaId?.let(onDownload) },
             onShare = { state.mediaId?.let(onShare) },
+            onShareLink = { state.mediaId?.let(onShareLink) },
             onCopyStreamLink = { state.mediaId?.let(onCopyStreamLink) },
             onEdit = { onServer -> state.mediaId?.let { onEdit(it, onServer) } },
         )
@@ -436,6 +438,7 @@ private fun BoxScope.MenuSheet(
     onQueue: () -> Unit,
     onDownload: () -> Unit,
     onShare: () -> Unit,
+    onShareLink: () -> Unit,
     onCopyStreamLink: () -> Unit,
     onEdit: (onServer: Boolean) -> Unit,
 ) {
@@ -529,9 +532,15 @@ private fun BoxScope.MenuSheet(
                     onDownload()
                 }
             }
-            MenuRow(Icons.Filled.Share, stringResource(R.string.music_share), detail = serverNote, enabled = online) {
+            // The file: from the phone when downloaded, otherwise fetched from the server first
+            val downloaded = download == DownloadStatus.DOWNLOADED
+            MenuRow(Icons.Filled.Share, stringResource(R.string.music_share), detail = serverNote.takeUnless { downloaded }, enabled = downloaded || online) {
                 onDismiss()
                 onShare()
+            }
+            MenuRow(Icons.Filled.Link, stringResource(R.string.music_share_link), detail = serverNote, enabled = online) {
+                onDismiss()
+                onShareLink()
             }
             MenuRow(Icons.Filled.Link, stringResource(R.string.music_copy_stream_link), detail = serverNote, enabled = online) {
                 onDismiss()

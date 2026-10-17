@@ -8,7 +8,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
@@ -382,15 +385,14 @@ fun DownloadsScreen(
                 exit = slideOutVertically { height -> height } + fadeOut(),
             ) {
                 nowPlaying?.let { state ->
-                    val track = downloads.firstOrNull { it.download.itemId.toString() == state.mediaId }?.download
                     MusicMiniPlayer(
                         state = state,
-                        favorite = track?.let { viewModel.isFavorite(it, pendingFavorites) },
-                        onToggleFavorite = { track?.let { viewModel.toggleFavorite(it, pendingFavorites) } },
                         onTogglePlayPause = { viewModel.togglePlayPause() },
                         onPrevious = { viewModel.playPrevious() },
                         onNext = { viewModel.playNext() },
                         onStop = { viewModel.stopMusic() },
+                        positionMs = viewModel::musicPositionMs,
+                        durationMs = viewModel::musicDurationMs,
                         onOpen = onOpenNowPlaying,
                     )
                 }
@@ -463,14 +465,28 @@ fun DownloadsScreen(
                 } else if (downloads.isEmpty()) {
                     DownloadsEmpty(modifier = Modifier.weight(1f))
                 } else {
-                    DownloadsBrowser(
-                        index = index,
-                        location = location,
-                        searchQuery = searchQuery,
-                        actions = browseActions,
-                        selection = selection,
+                    // Deeper in slides in from the right, back slides in from the left
+                    val depth = locations.size
+                    AnimatedContent(
+                        targetState = location to depth,
+                        transitionSpec = {
+                            val forward = targetState.second >= initialState.second
+                            val direction = if (forward) 1 else -1
+                            (slideInHorizontally(tween(BROWSE_ANIMATION_MS)) { width -> direction * width / 5 } + fadeIn(tween(BROWSE_ANIMATION_MS))) togetherWith
+                                (slideOutHorizontally(tween(BROWSE_ANIMATION_MS)) { width -> -direction * width / 5 } + fadeOut(tween(BROWSE_ANIMATION_MS / 2)))
+                        },
+                        label = "browse",
                         modifier = Modifier.weight(1f),
-                    )
+                    ) { (shown, _) ->
+                        DownloadsBrowser(
+                            index = index,
+                            location = shown,
+                            searchQuery = searchQuery,
+                            actions = browseActions,
+                            selection = selection,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         },
@@ -633,3 +649,5 @@ fun DownloadsEmpty(
         )
     }
 }
+
+private const val BROWSE_ANIMATION_MS = 240

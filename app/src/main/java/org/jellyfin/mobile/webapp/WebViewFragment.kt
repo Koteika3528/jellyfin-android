@@ -59,7 +59,18 @@ import org.jellyfin.mobile.utils.isOutdated
 import org.jellyfin.mobile.utils.requestNoBatteryOptimizations
 import org.jellyfin.mobile.utils.runOnUiThread
 import org.koin.android.ext.android.inject
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.ViewCompat
@@ -235,15 +246,26 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
         view.setContent {
             AppTheme {
                 val state = musicPlayer.nowPlaying.collectAsState().value
-                if (state != null) {
-                    MusicMiniPlayer(
-                        state = state,
-                        onTogglePlayPause = musicPlayer::togglePlayPause,
-                        onPrevious = musicPlayer::previous,
-                        onNext = musicPlayer::next,
-                        onStop = musicPlayer::stop,
-                        onOpen = { NowPlayingFragment.open(parentFragmentManager) },
-                    )
+                // The last track stays on the card while it slides away
+                var last by remember { mutableStateOf(state) }
+                LaunchedEffect(state) { if (state != null) last = state }
+                AnimatedVisibility(
+                    visible = state != null,
+                    enter = slideInVertically(tween(MINI_PLAYER_ANIMATION_MS)) { it } + fadeIn(tween(MINI_PLAYER_ANIMATION_MS)),
+                    exit = slideOutVertically(tween(MINI_PLAYER_ANIMATION_MS)) { it } + fadeOut(tween(MINI_PLAYER_ANIMATION_MS)),
+                ) {
+                    (state ?: last)?.let { current ->
+                        MusicMiniPlayer(
+                            state = current,
+                            onTogglePlayPause = musicPlayer::togglePlayPause,
+                            onPrevious = musicPlayer::previous,
+                            onNext = musicPlayer::next,
+                            onStop = musicPlayer::stop,
+                            positionMs = musicPlayer::positionMs,
+                            durationMs = musicPlayer::durationMs,
+                            onOpen = { NowPlayingFragment.open(parentFragmentManager) },
+                        )
+                    }
                 }
             }
         }
@@ -409,3 +431,4 @@ class WebViewFragment : Fragment(), BackPressInterceptor, JellyfinWebChromeClien
 }
 
 private const val MUSIC_STATE_INTERVAL_MS = 1_000L
+private const val MINI_PLAYER_ANIMATION_MS = 260

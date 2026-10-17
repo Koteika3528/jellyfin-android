@@ -260,6 +260,10 @@ class DownloadsViewModel : ViewModel(), KoinComponent {
 
     fun stopMusic() = musicPlayer.stop()
 
+    fun musicPositionMs() = musicPlayer.positionMs()
+
+    fun musicDurationMs() = musicPlayer.durationMs()
+
 
     fun download(download: DownloadEntity) {
         viewModelScope.launch {

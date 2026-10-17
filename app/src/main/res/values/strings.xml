@@ -399,7 +399,7 @@
     <string name="music_downloading">Downloading…</string>
     <string name="music_menu_checking">Checking the server…</string>
     <string name="music_menu_offline">The server is not reachable</string>
-    <string name="music_share">Share</string>
+    <string name="music_share">Send the file</string>
     <string name="music_copy_stream_link">Copy stream link</string>
     <string name="music_edit_on_phone">Edit details on the phone</string>
     <string name="music_edit_on_phone_detail">Only of the downloaded track</string>
@@ -419,4 +419,7 @@
     <string name="music_playing_from_album">Playing from album</string>
     <string name="music_favorite">Favorite</string>
     <string name="music_favorite_failed">Changing the favorite failed: the server is not reachable</string>
+    <string name="music_share_link">Share a link</string>
+    <string name="music_share_preparing">Getting the track ready to send…</string>
+    <string name="music_share_file_failed">Getting the track's file failed</string>
 </resources>

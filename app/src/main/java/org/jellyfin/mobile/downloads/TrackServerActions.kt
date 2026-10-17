@@ -14,11 +14,13 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemUpdateApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.post
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.NameGuidPair
+import java.io.File
 import java.io.IOException
 import java.util.UUID
 
@@ -30,7 +32,7 @@ data class TimedLink(val url: String, val expiresAt: String)
 
 /**
  * What the music player does with a track on the server: share links (fork endpoint `Shares`), a link to the
- * audio itself, and changing its details for everyone.
+ * audio itself, its file to send, and changing its details for everyone.
  */
 class TrackServerActions(private val api: ApiClient, private val okHttpClient: OkHttpClient) {
     suspend fun access(): ServerAccess = withContext(Dispatchers.IO) {
@@ -80,6 +82,33 @@ class TrackServerActions(private val api: ApiClient, private val okHttpClient: O
         Unit
     }
 
+    /**
+     * The track's original file fetched into [directory] (emptied first: only the last shared track is kept),
+     * named "Artist - Title.ext" for the app it is sent to.
+     */
+    suspend fun fetchFile(itemId: UUID, directory: File): File = withContext(Dispatchers.IO) {
+        val item = api.userLibraryApi.getItem(itemId).content
+        val extension = item.path?.substringAfterLast('.', "")?.takeIf { it.isNotEmpty() && it.length <= MAX_EXTENSION }
+            ?: item.container?.substringBefore(',')?.takeIf(String::isNotBlank)
+            ?: "mp3"
+        val artist = item.artists?.firstOrNull() ?: item.albumArtist
+        val name = listOfNotNull(artist, item.name).joinToString(" - ").ifBlank { itemId.toString() }
+        val fileName = "${name.replace(UNSAFE_CHARACTERS, "_").take(MAX_NAME)}.$extension"
+
+        directory.deleteRecursively()
+        directory.mkdirs()
+        val target = File(directory, fileName)
+        val partial = File(directory, "$fileName.part")
+        val request = Request.Builder().url(api.libraryApi.getDownloadUrl(itemId)).build()
+        okHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Fetching the track failed: ${response.code}")
+            val body = response.body ?: throw IOException("Fetching the track failed: no data")
+            body.byteStream().use { input -> partial.outputStream().use { output -> input.copyTo(output) } }
+        }
+        if (!partial.renameTo(target)) throw IOException("Could not keep the fetched track")
+        target
+    }
+
     /** The track as the server has it, with everything an update has to send back. */
     suspend fun item(itemId: UUID): BaseItemDto = withContext(Dispatchers.IO) {
         api.userLibraryApi.getItem(itemId).content
@@ -126,6 +155,9 @@ class TrackServerActions(private val api: ApiClient, private val okHttpClient: O
 
     private companion object {
         const val ACCESS_TIMEOUT_MS = 4_000L
+        const val MAX_EXTENSION = 5
+        const val MAX_NAME = 120
+        val UNSAFE_CHARACTERS = Regex("[\\\\/:*?\"<>|\\p{Cntrl}]")
         val json = Json { ignoreUnknownKeys = true }
     }
 }

@@ -391,7 +391,7 @@
     <string name="music_downloading">Скачивается…</string>
     <string name="music_menu_checking">Проверяю связь с сервером…</string>
     <string name="music_menu_offline">Нет связи с сервером</string>
-    <string name="music_share">Поделиться</string>
+    <string name="music_share">Отправить файл</string>
     <string name="music_copy_stream_link">Копировать ссылку на поток</string>
     <string name="music_edit_on_phone">Изменить сведения на телефоне</string>
     <string name="music_edit_on_phone_detail">Только у скачанного трека</string>
@@ -411,4 +411,7 @@
     <string name="music_playing_from_album">Из альбома</string>
     <string name="music_favorite">Любимое</string>
     <string name="music_favorite_failed">Не удалось изменить «Любимое»: нет связи с сервером</string>
+    <string name="music_share_link">Поделиться ссылкой</string>
+    <string name="music_share_preparing">Готовлю трек к отправке…</string>
+    <string name="music_share_file_failed">Не удалось подготовить файл трека</string>
 </resources>
