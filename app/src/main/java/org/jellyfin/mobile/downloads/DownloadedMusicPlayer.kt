@@ -3,6 +3,9 @@ package org.jellyfin.mobile.downloads
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -210,9 +213,53 @@ class DownloadedMusicPlayer(private val context: Context) {
     }
 
     fun stop() {
+        setSleepTimer(null)
         controller?.run {
             stop()
             clearMediaItems()
+        }
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val _sleepAt = MutableStateFlow<Long?>(null)
+
+    /** When the sleep timer pauses the music ([SystemClock.elapsedRealtime]), null when it is off. */
+    val sleepAt: StateFlow<Long?> = _sleepAt.asStateFlow()
+
+    private val sleep = Runnable {
+        _sleepAt.value = null
+        withController { it.pause() }
+    }
+
+    /** Pauses the music in [minutes]; null turns the timer off. */
+    fun setSleepTimer(minutes: Int?) {
+        handler.removeCallbacks(sleep)
+        if (minutes == null) {
+            _sleepAt.value = null
+            return
+        }
+        val delayMs = minutes * MS_PER_MINUTE
+        _sleepAt.value = SystemClock.elapsedRealtime() + delayMs
+        handler.postDelayed(sleep, delayMs)
+    }
+
+    /**
+     * Shows the new details of a track (edited on the phone or on the server) in the queue, here and in the
+     * notification. The same file goes on playing.
+     */
+    fun updateMetadata(mediaId: String, item: BaseItemDto) = withController { player ->
+        for (index in 0 until player.mediaItemCount) {
+            val current = player.getMediaItemAt(index)
+            if (current.mediaId != mediaId) continue
+            val metadata = current.mediaMetadata.buildUpon()
+                .setTitle(item.name)
+                .setArtist(item.artists?.joinToString().takeUnless { it.isNullOrBlank() } ?: item.albumArtist)
+                .setAlbumTitle(item.album)
+                .setAlbumArtist(item.albumArtist)
+                .setTrackNumber(item.indexNumber)
+                .setDiscNumber(item.parentIndexNumber)
+                .build()
+            player.replaceMediaItem(index, current.buildUpon().setMediaMetadata(metadata).build())
         }
     }
 
@@ -253,6 +300,8 @@ class DownloadedMusicPlayer(private val context: Context) {
     }
 
     companion object {
+        private const val MS_PER_MINUTE = 60_000L
+
         /** Builds a playable item from a completed download, null if the audio file is missing. */
         fun toMediaItem(download: DownloadFiles): MediaItem? {
             val item: BaseItemDto = download.download.item

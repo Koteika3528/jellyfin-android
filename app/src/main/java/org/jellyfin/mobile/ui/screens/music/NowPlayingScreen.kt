@@ -2,6 +2,22 @@ package org.jellyfin.mobile.ui.screens.music
 
 import android.os.Build
 import android.text.format.DateUtils
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
+import org.jellyfin.mobile.downloads.ServerAccess
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -41,7 +57,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -115,7 +130,12 @@ private val PanelColor = Color(0xF21C1B1F)
  * bar and the controls in Android's own style, with press animations; the queue is a side sheet. Short swipes
  * (or a quick flick) do it: down closes the player, left or up opens the queue, right or down closes it.
  *
+ * Everything else (the queue, reverse order, a sleep timer, downloading, sharing, the details) is in the menu
+ * behind "more", a sheet from the bottom.
+ *
  * @param downloadStatus the download of the current track, null when it is not downloaded.
+ * @param serverAccess whether the server answers and lets the user edit, null while it is asked
+ * ([onMenuOpened] asks it again).
  */
 @Composable
 fun NowPlayingScreen(
@@ -123,6 +143,11 @@ fun NowPlayingScreen(
     onClose: () -> Unit,
     downloadStatus: (String?) -> DownloadStatus? = { null },
     onDownload: (String) -> Unit = {},
+    serverAccess: ServerAccess? = null,
+    onMenuOpened: () -> Unit = {},
+    onShare: (String) -> Unit = {},
+    onCopyStreamLink: (String) -> Unit = {},
+    onEdit: (itemId: String, onServer: Boolean) -> Unit = { _, _ -> },
 ) {
     val state = player.nowPlaying.collectAsState().value
     if (state == null) {
@@ -160,6 +185,13 @@ fun NowPlayingScreen(
         fun showQueue(show: Boolean) {
             scope.launch { panelOffset.animateTo(if (show) 0f else panelWidth, tween(ANIMATION_MS, easing = FastOutSlowInEasing)) }
         }
+
+        var menuOpen by remember { mutableStateOf(false) }
+        fun openMenu() {
+            menuOpen = true
+            onMenuOpened()
+        }
+        BackHandler(enabled = menuOpen) { menuOpen = false }
 
         Background(artwork = state.artworkUri)
 
@@ -226,7 +258,6 @@ fun NowPlayingScreen(
                     .offset { IntOffset(0, (contentOffsetY.value * DRAG_RESISTANCE).roundToInt()) }
                     .graphicsLayer { alpha = 1f - (contentOffsetY.value / (closeDistance * 4)).coerceIn(0f, 0.5f) },
             ) {
-                val download = downloadStatus(state.mediaId)
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PressButton(onClick = onClose) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Color.White) }
                     Text(
@@ -237,21 +268,13 @@ fun NowPlayingScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f),
                     )
-                    PressButton(onClick = { state.mediaId?.let(onDownload) }, enabled = download == null || download == DownloadStatus.ERROR) {
-                        when (download) {
-                            DownloadStatus.DOWNLOADED -> Icon(Icons.Filled.DownloadDone, contentDescription = stringResource(R.string.music_downloaded), tint = Accent)
-                            DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED ->
-                                CircularProgressIndicator(color = Accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                            else -> Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.music_download), tint = Color.White)
-                        }
-                    }
-                    ToggleButton(Icons.Filled.SwapVert, stringResource(R.string.music_reverse), state.reversed) { player.setReversed(!state.reversed) }
-                    PressButton(onClick = { showQueue(true) }) {
-                        Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = stringResource(R.string.music_queue), tint = Color.White)
+                    PressButton(onClick = { openMenu() }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.music_more), tint = Color.White)
                     }
                 }
 
-                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                // Not edge to edge: room around the cover, it still fills the height on short screens
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = COVER_MARGIN, vertical = 16.dp), contentAlignment = Alignment.Center) {
                     // The cover shrinks a little while paused, as in Android's media players
                     val coverScale by animateFloatAsState(if (state.isPlaying) 1f else PAUSED_COVER_SCALE, tween(ANIMATION_MS * 2), label = "cover")
                     AsyncImage(
@@ -275,30 +298,22 @@ fun NowPlayingScreen(
                 }
 
                 Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                    // Stop sits by the title, where Android's players keep their extra action
-                    Row(modifier = Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = state.title.orEmpty(),
-                                color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = state.subtitle.orEmpty(),
-                                color = Dim,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        PressButton(onClick = { player.stop() }, size = 44.dp) {
-                            Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.music_stop), tint = Dim, modifier = Modifier.size(24.dp))
-                        }
-                    }
+                    Text(
+                        text = state.title.orEmpty(),
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = state.subtitle.orEmpty(),
+                        color = Dim,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                    )
                     SeekBar(position = position, duration = duration, onSeek = { target ->
                         player.seekTo(target)
                         position = target
@@ -329,6 +344,245 @@ fun NowPlayingScreen(
                 )
             }
         }
+
+        // Over everything, outside the swipes of the player
+        MenuSheet(
+            visible = menuOpen,
+            player = player,
+            state = state,
+            download = downloadStatus(state.mediaId),
+            serverAccess = serverAccess,
+            onDismiss = { menuOpen = false },
+            onQueue = {
+                menuOpen = false
+                showQueue(true)
+            },
+            onDownload = { state.mediaId?.let(onDownload) },
+            onShare = { state.mediaId?.let(onShare) },
+            onCopyStreamLink = { state.mediaId?.let(onCopyStreamLink) },
+            onEdit = { onServer -> state.mediaId?.let { onEdit(it, onServer) } },
+        )
+    }
+}
+
+/**
+ * "More" of the player: a sheet from the bottom with the track on top and what can be done with it. Actions
+ * close it, switches (reverse order, the sleep timer) leave it open. Swiped down or tapped outside, it closes.
+ */
+@Composable
+private fun BoxScope.MenuSheet(
+    visible: Boolean,
+    player: DownloadedMusicPlayer,
+    state: DownloadedMusicPlayer.NowPlaying,
+    download: DownloadStatus?,
+    serverAccess: ServerAccess?,
+    onDismiss: () -> Unit,
+    onQueue: () -> Unit,
+    onDownload: () -> Unit,
+    onShare: () -> Unit,
+    onCopyStreamLink: () -> Unit,
+    onEdit: (onServer: Boolean) -> Unit,
+) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(ANIMATION_MS)), exit = fadeOut(tween(ANIMATION_MS))) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0x99000000))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        )
+    }
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(tween(ANIMATION_MS + 60, easing = FastOutSlowInEasing)) { it },
+        exit = slideOutVertically(tween(ANIMATION_MS, easing = FastOutSlowInEasing)) { it },
+        modifier = Modifier.align(Alignment.BottomCenter),
+    ) {
+        val density = LocalDensity.current
+        val closeDistance = with(density) { CLOSE_DISTANCE.toPx() }
+        var dragY by remember { mutableFloatStateOf(0f) }
+        val offsetY by animateFloatAsState(dragY, tween(if (dragY == 0f) ANIMATION_MS else 0), label = "sheet")
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = SHEET_MAX_WIDTH)
+                .offset { IntOffset(0, offsetY.roundToInt()) }
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(PanelColor)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (dragY > closeDistance) onDismiss()
+                            dragY = 0f
+                        },
+                        onDragCancel = { dragY = 0f },
+                    ) { change, amount ->
+                        dragY = (dragY + amount).coerceAtLeast(0f)
+                        change.consume()
+                    }
+                }
+                .navigationBarsPadding()
+                .padding(bottom = 8.dp),
+        ) {
+            // The handle
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x4DFFFFFF)),
+            )
+            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = state.artworkUri,
+                    placeholder = painterResource(R.drawable.ic_music_note_white_24dp),
+                    fallback = painterResource(R.drawable.ic_music_note_white_24dp),
+                    error = painterResource(R.drawable.ic_music_note_white_24dp),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF2A2A2E)),
+                )
+                Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
+                    Text(state.title.orEmpty(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(state.subtitle.orEmpty(), color = Dim, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Box(modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth().height(1.dp).background(Color(0x1AFFFFFF)))
+
+            val online = serverAccess?.online == true
+            val serverNote = when {
+                serverAccess == null -> stringResource(R.string.music_menu_checking)
+                !online -> stringResource(R.string.music_menu_offline)
+                else -> null
+            }
+
+            MenuRow(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.music_queue), onClick = onQueue)
+            MenuRow(
+                icon = Icons.Filled.SwapVert,
+                text = stringResource(R.string.music_reverse),
+                checked = state.reversed,
+                onClick = { player.setReversed(!state.reversed) },
+            )
+            SleepTimerRow(player)
+            when (download) {
+                DownloadStatus.DOWNLOADED -> MenuRow(Icons.Filled.DownloadDone, stringResource(R.string.music_downloaded), enabled = false, tint = Accent) {}
+                DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED ->
+                    MenuRow(Icons.Filled.Download, stringResource(R.string.music_downloading), enabled = false) {}
+                else -> MenuRow(Icons.Filled.Download, stringResource(R.string.music_download)) {
+                    onDismiss()
+                    onDownload()
+                }
+            }
+            MenuRow(Icons.Filled.Share, stringResource(R.string.music_share), detail = serverNote, enabled = online) {
+                onDismiss()
+                onShare()
+            }
+            MenuRow(Icons.Filled.Link, stringResource(R.string.music_copy_stream_link), detail = serverNote, enabled = online) {
+                onDismiss()
+                onCopyStreamLink()
+            }
+            if (download == DownloadStatus.DOWNLOADED) {
+                MenuRow(Icons.Filled.Edit, stringResource(R.string.music_edit_on_phone), detail = stringResource(R.string.music_edit_on_phone_detail)) {
+                    onDismiss()
+                    onEdit(false)
+                }
+            }
+            if (online && serverAccess?.canEdit == true) {
+                MenuRow(Icons.Filled.Edit, stringResource(R.string.music_edit_on_server), detail = stringResource(R.string.music_edit_on_server_detail)) {
+                    onDismiss()
+                    onEdit(true)
+                }
+            }
+            MenuRow(Icons.Filled.Stop, stringResource(R.string.music_stop)) {
+                onDismiss()
+                player.stop()
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuRow(
+    icon: ImageVector,
+    text: String,
+    detail: String? = null,
+    enabled: Boolean = true,
+    checked: Boolean? = null,
+    tint: Color = Color.White,
+    onClick: () -> Unit,
+) {
+    val contentAlpha = if (enabled) 1f else DISABLED_ALPHA
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .graphicsLayer { alpha = contentAlpha },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = if (checked == true) Accent else tint, modifier = Modifier.size(22.dp))
+        Column(modifier = Modifier.padding(start = 18.dp).weight(1f)) {
+            Text(text, color = Color.White, fontSize = 15.sp)
+            if (detail != null) Text(detail, color = Dim, fontSize = 12.sp)
+        }
+        if (checked != null) {
+            val dot by animateColorAsState(if (checked) Accent else Color(0x33FFFFFF), tween(ANIMATION_MS), label = "check")
+            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(dot))
+        }
+    }
+}
+
+/** "Sleep timer": a tap shows the choices, the time left is shown while it runs. */
+@Composable
+private fun SleepTimerRow(player: DownloadedMusicPlayer) {
+    val sleepAt by player.sleepAt.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(sleepAt) {
+        while (sleepAt != null) {
+            now = SystemClock.elapsedRealtime()
+            delay(MS_PER_SECOND)
+        }
+    }
+    val left = sleepAt?.let { at -> ((at - now).coerceAtLeast(0L) + MS_PER_MINUTE - 1) / MS_PER_MINUTE }
+    MenuRow(
+        icon = Icons.Filled.Timer,
+        text = stringResource(R.string.music_sleep_timer),
+        detail = left?.let { stringResource(R.string.music_sleep_timer_left, it.toInt()) },
+        checked = sleepAt != null,
+        onClick = { expanded = !expanded },
+    )
+    AnimatedVisibility(visible = expanded) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 60.dp, end = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (minutes in SLEEP_CHOICES) {
+                Chip(stringResource(R.string.music_sleep_timer_minutes, minutes)) {
+                    player.setSleepTimer(minutes)
+                    expanded = false
+                }
+            }
+            if (sleepAt != null) {
+                Chip(stringResource(R.string.music_sleep_timer_off)) {
+                    player.setSleepTimer(null)
+                    expanded = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Chip(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0x1FFFFFFF))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(text, color = Color.White, fontSize = 13.sp)
     }
 }
 
@@ -594,6 +848,11 @@ private fun time(ms: Long): String = DateUtils.formatElapsedTime(ms.coerceAtLeas
 private const val POSITION_REFRESH_MS = 500L
 private const val CONNECT_WAIT_MS = 1_500L
 private const val MS_PER_SECOND = 1000L
+private const val MS_PER_MINUTE = 60_000L
+private const val DISABLED_ALPHA = 0.45f
+private val SLEEP_CHOICES = listOf(15, 30, 45, 60)
+private val SHEET_MAX_WIDTH = 560.dp
+private val COVER_MARGIN = 52.dp
 private const val ANIMATION_MS = 180
 private const val PRESS_MS = 90
 private const val PRESSED_SCALE = 0.88f

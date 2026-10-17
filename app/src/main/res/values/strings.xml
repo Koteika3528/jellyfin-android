@@ -395,4 +395,25 @@
     <string name="downloads_waiting_wifi_now">Download now</string>
     <string name="downloads_waiting_wifi_always">Always over mobile data</string>
     <string name="downloads_waiting_wifi_toast">Will download over Wi‑Fi: only it is allowed for downloads (see Downloads to use mobile data).</string>
+    <string name="music_more">More</string>
+    <string name="music_downloading">Downloading…</string>
+    <string name="music_menu_checking">Checking the server…</string>
+    <string name="music_menu_offline">The server is not reachable</string>
+    <string name="music_share">Share</string>
+    <string name="music_copy_stream_link">Copy stream link</string>
+    <string name="music_edit_on_phone">Edit details on the phone</string>
+    <string name="music_edit_on_phone_detail">Only of the downloaded track</string>
+    <string name="music_edit_on_server">Edit details on the server</string>
+    <string name="music_edit_on_server_detail">Everyone sees them</string>
+    <string name="music_edit_server_hint">Changed on the server for everyone. The album is changed on the album itself. An empty field stays as it is.</string>
+    <string name="music_edit_saved">Details saved</string>
+    <string name="music_edit_failed">Saving the details on the server failed</string>
+    <string name="music_edit_load_failed">Getting the details from the server failed</string>
+    <string name="music_sleep_timer">Sleep timer</string>
+    <string name="music_sleep_timer_left">Pauses in %1$d min</string>
+    <string name="music_sleep_timer_minutes">%1$d min</string>
+    <string name="music_sleep_timer_off">Off</string>
+    <string name="music_share_title">Share the track</string>
+    <string name="music_link_failed">Making the link failed</string>
+    <string name="music_stream_link_copied">Stream link copied. Works until %1$s</string>
 </resources>

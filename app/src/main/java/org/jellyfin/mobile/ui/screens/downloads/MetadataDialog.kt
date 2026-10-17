@@ -41,19 +41,40 @@ fun MetadataDialog(
     onSave: (MetadataFields) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
+) = MetadataDialog(
+    items = remember(downloads) { downloads.map { it.item } },
+    edited = edited,
+    onSave = onSave,
+    onReset = onReset,
+    onDismiss = onDismiss,
+)
+
+/**
+ * The same for items as the server has them ([title] says where the changes go). The album of a track is
+ * the album's own name on the server, so it is changed there with the album ([albumEditable] false).
+ */
+@Composable
+fun MetadataDialog(
+    items: List<org.jellyfin.sdk.model.api.BaseItemDto>,
+    edited: Boolean,
+    onSave: (MetadataFields) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+    title: String? = null,
+    hint: String? = null,
+    albumEditable: Boolean = true,
 ) {
-    val items = downloads.map { it.item }
     val single = items.size == 1
     val music = items.all { it.mediaType == MediaType.AUDIO }
 
     fun <T> common(value: (org.jellyfin.sdk.model.api.BaseItemDto) -> T?): T? = items.map(value).distinct().singleOrNull()
 
-    val fields = remember(downloads) {
+    val fields = remember(items) {
         buildList {
             if (single) add(Field(FieldKind.NAME, common { it.name }.orEmpty()))
             if (music) {
                 add(Field(FieldKind.ARTISTS, common { it.artists?.joinToString(", ") }.orEmpty(), differs = common { it.artists?.joinToString(", ") } == null && !single))
-                add(Field(FieldKind.ALBUM, common { it.album }.orEmpty(), differs = common { it.album } == null && !single))
+                if (albumEditable) add(Field(FieldKind.ALBUM, common { it.album }.orEmpty(), differs = common { it.album } == null && !single))
                 add(Field(FieldKind.ALBUM_ARTIST, common { it.albumArtist }.orEmpty(), differs = common { it.albumArtist } == null && !single))
                 if (single) {
                     add(Field(FieldKind.TRACK, common { it.indexNumber }?.toString().orEmpty()))
@@ -63,15 +84,15 @@ fun MetadataDialog(
             add(Field(FieldKind.YEAR, common { it.productionYear }?.toString().orEmpty(), differs = common { it.productionYear } == null && !single))
         }
     }
-    val values = remember(downloads) { fields.associate { it.kind to mutableStateOf(it.initial) } }
+    val values = remember(items) { fields.associate { it.kind to mutableStateOf(it.initial) } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (single) R.string.metadata_edit_title else R.string.metadata_edit_title_many, items.size)) },
+        title = { Text(title ?: stringResource(if (single) R.string.metadata_edit_title else R.string.metadata_edit_title_many, items.size)) },
         text = {
             Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text(
-                    text = stringResource(R.string.metadata_edit_hint),
+                    text = hint ?: stringResource(R.string.metadata_edit_hint),
                     style = MaterialTheme.typography.caption,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
