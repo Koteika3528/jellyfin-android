@@ -422,4 +422,6 @@
     <string name="music_share_link">Share a link</string>
     <string name="music_share_preparing">Getting the track ready to send…</string>
     <string name="music_share_file_failed">Getting the file of the track failed</string>
+    <string name="downloads_tab_favorites">Favorites</string>
+    <string name="downloads_favorites_empty">What you mark with the heart, in the player or in the downloads, shows up here.</string>
 </resources>

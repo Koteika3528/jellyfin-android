@@ -8,7 +8,8 @@ import org.jellyfin.mobile.BuildConfig
 @Suppress("MagicNumber")
 object Constants {
     // App Info
-    const val APP_INFO_NAME = "Jellyfin for Android"
+    // Fork: the server and the web client tell the mod from the official app by this name
+    const val APP_INFO_NAME = "Jellyfin Mod for Android"
     const val APP_INFO_VERSION: String = BuildConfig.VERSION_NAME
 
     // Webapp constants

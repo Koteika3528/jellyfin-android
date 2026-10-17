@@ -31,6 +31,8 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
+        // Fork: an app of its own, installed beside the official one
+        applicationId = "org.jellyfin.mobile.mod"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionName = project.getVersionName()
@@ -122,7 +124,7 @@ android {
     }
 }
 
-base.archivesName.set("jellyfin-android-v${project.getVersionName()}")
+base.archivesName.set("jellyfin-mod-${project.getVersionName()}")
 
 dependencies {
     val proprietaryImplementation by configurations

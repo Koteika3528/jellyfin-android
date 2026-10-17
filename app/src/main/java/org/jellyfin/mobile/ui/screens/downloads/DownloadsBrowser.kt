@@ -66,6 +66,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -268,6 +269,9 @@ private enum class LibraryTab(val title: Int) {
     ARTISTS(R.string.downloads_tab_artists),
     GENRES(R.string.downloads_tab_genres),
     TRACKS(R.string.downloads_tab_tracks),
+
+    /** What was marked with the heart (on the phone or on the server), in this library. */
+    FAVORITES(R.string.downloads_tab_favorites),
     SERIES(R.string.downloads_tab_series),
     MOVIES(R.string.downloads_tab_movies),
 }
@@ -283,6 +287,7 @@ private fun LibraryView(index: OfflineIndex, library: String, actions: BrowseAct
         if (hasSeries) add(LibraryTab.SERIES)
         if (hasMovies) add(LibraryTab.MOVIES)
         if (!hasMusic && (hasSeries || hasMovies)) add(LibraryTab.GENRES)
+        add(LibraryTab.FAVORITES)
     }
     var selected by rememberSaveable(library) { mutableIntStateOf(0) }
     val tab = tabs.getOrNull(selected) ?: tabs.firstOrNull() ?: return
@@ -324,6 +329,16 @@ private fun LibraryView(index: OfflineIndex, library: String, actions: BrowseAct
                 val tracks = remember(entries) { index.tracks(entries) }
                 EntryList(tracks, actions, selection, Modifier.weight(1f), playAs = tracks)
             }
+            LibraryTab.FAVORITES -> {
+                // Not remembered: a heart taken off takes the entry off at once
+                val favorites = index.tracks(entries.filter { it.isAudio && actions.isFavorite(it.download) }) +
+                    entries.filter { !it.isAudio && actions.isFavorite(it.download) }
+                if (favorites.isEmpty()) {
+                    FavoritesEmpty(Modifier.weight(1f))
+                } else {
+                    EntryList(favorites, actions, selection, Modifier.weight(1f), playAs = favorites.filter { it.isAudio })
+                }
+            }
             LibraryTab.SERIES -> GroupGrid(
                 groups = remember(entries) { index.series(entries) },
                 square = false,
@@ -347,6 +362,18 @@ private fun LibraryView(index: OfflineIndex, library: String, actions: BrowseAct
                 square = false,
             )
         }
+    }
+}
+
+@Composable
+private fun FavoritesEmpty(modifier: Modifier) {
+    Box(modifier = modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(R.string.downloads_favorites_empty),
+            style = MaterialTheme.typography.body1,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

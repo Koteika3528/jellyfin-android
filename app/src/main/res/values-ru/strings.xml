@@ -414,4 +414,6 @@
     <string name="music_share_link">Поделиться ссылкой</string>
     <string name="music_share_preparing">Готовлю трек к отправке…</string>
     <string name="music_share_file_failed">Не удалось подготовить файл трека</string>
+    <string name="downloads_tab_favorites">Избранное</string>
+    <string name="downloads_favorites_empty">Здесь будет то, что отмечено сердечком — в плеере или в списке загрузок.</string>
 </resources>
