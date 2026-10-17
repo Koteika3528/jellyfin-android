@@ -421,5 +421,5 @@
     <string name="music_favorite_failed">Changing the favorite failed: the server is not reachable</string>
     <string name="music_share_link">Share a link</string>
     <string name="music_share_preparing">Getting the track ready to send…</string>
-    <string name="music_share_file_failed">Getting the track's file failed</string>
+    <string name="music_share_file_failed">Getting the file of the track failed</string>
 </resources>
